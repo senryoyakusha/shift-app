@@ -2,89 +2,140 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>シフト入力アプリ</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>シフト管理</title>
     <style>
-        :root { --main-bg: #fff; --stamp-0920: #FF7F50; --stamp-off: #FF69B4; --stamp-work: #2E8B57; }
-        body { font-family: sans-serif; margin: 0; padding-bottom: 100px; background: #fdfdfd; }
-        header { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; position: sticky; top: 0; background: #fff; z-index: 10; }
+        :root { --main-red: #ff5a5f; --bg-gray: #f8f8f8; }
+        body { font-family: sans-serif; margin: 0; background: var(--bg-gray); color: #333; overflow-x: hidden; }
         
-        /* カレンダー表示 */
-        .calendar-container { padding: 10px; }
-        .month-title { text-align: center; font-weight: bold; font-size: 1.2rem; color: #ff7f7f; margin: 10px 0; }
-        .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; background: #eee; border: 1px solid #eee; }
-        .day { background: #fff; min-height: 80px; padding: 5px; position: relative; font-size: 0.8rem; }
-        .day.sun { color: red; } .day.sat { color: blue; }
-        .shift-label { display: block; margin-top: 5px; padding: 2px; border-radius: 4px; color: #fff; text-align: center; font-size: 0.7rem; font-weight: bold; }
+        /* ヘッダー */
+        header { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: #fff; border-bottom: 1px solid #ddd; sticky: top; }
+        .month-nav { color: var(--main-red); font-weight: bold; font-size: 1.2rem; }
 
-        /* スタンプパレット */
-        .palette { position: fixed; bottom: 0; width: 100%; background: #eee; display: flex; justify-content: space-around; padding: 15px 0; border-top: 2px solid #ddd; }
-        .stamp { width: 60px; height: 35px; border-radius: 10px; border: 2px solid transparent; color: #fff; font-weight: bold; font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .stamp.selected { border-color: #333; transform: scale(1.1); box-shadow: 0 0 5px rgba(0,0,0,0.3); }
+        /* カレンダー表示 */
+        .calendar-section { background: #fff; margin-bottom: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid #eee; }
+        .day { min-height: 70px; border-right: 1px solid #eee; border-top: 1px solid #eee; padding: 4px; position: relative; font-size: 0.75rem; text-align: center; }
+        .day:nth-child(7n) { border-right: none; }
+        .day.sun { color: #ff5a5f; } .day.sat { color: #007aff; }
+        .shift-badge { display: block; margin-top: 4px; padding: 4px 2px; border-radius: 6px; color: #fff; font-size: 0.7rem; font-weight: bold; }
+
+        /* 入力パレット（モーダル風） */
+        #paletteOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 100; }
+        .palette-content { position: fixed; bottom: 0; left: 0; width: 100%; background: #fff; border-radius: 20px 20px 0 0; padding: 20px 10px 40px; box-sizing: border-box; transform: translateY(100%); transition: transform 0.3s; }
+        .palette-content.show { transform: translateY(0); }
+        .palette-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 0 10px; color: #666; }
+        
+        .stamp-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+        .stamp { aspect-ratio: 1; border-radius: 8px; border: none; color: #fff; font-weight: bold; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        
+        /* スタンプの色（画像に基づき設定） */
+        .s-off { background: #ff5e99; } .s-req-off { background: #e63946; }
+        .s-0918 { background: #40c9a2; } .s-0919 { background: #f4a261; } .s-0920 { background: #e76f51; }
+        .s-0921 { background: #4ecdc4; } .s-1018 { background: #1d3557; } .s-1019 { background: #ffca3a; }
+        .s-1020 { background: #457b9d; } .s-1621 { background: #b56576; }
+        .s-1721 { background: #1d3557; } .s-work { background: #2a9d8f; }
+        .s-del { background: #fff; color: #333; border: 1px dashed #ccc; }
+
+        .close-btn { font-size: 24px; color: #ccc; border: none; background: none; }
     </style>
 </head>
 <body>
 
 <header>
-    <div style="color:red">MENU</div>
-    <div id="currentMonth">2026 / 2</div>
-    <div style="font-size:1.5rem; color:red">＋</div>
+    <div style="color:var(--main-red)">MENU</div>
+    <div class="month-nav">＜ 2026 / 2 ＞</div>
+    <div style="font-size:1.5rem; color:var(--main-red)">＋</div>
 </header>
 
-<div id="app" class="calendar-container">
-    </div>
+<div id="calendarApp"></div>
 
-<div class="palette">
-    <div class="stamp" style="background:var(--stamp-0920)" onclick="selectStamp('0920', 'var(--stamp-0920)', this)">0920</div>
-    <div class="stamp" style="background:var(--stamp-off)" onclick="selectStamp('休み', 'var(--stamp-off)', this)">休み</div>
-    <div class="stamp" style="background:var(--stamp-work)" onclick="selectStamp('作業日', 'var(--stamp-work)', this)">作業日</div>
-    <div class="stamp" style="background:#ccc; color:#333" onclick="selectStamp('', '', this)">消去</div>
+<div id="paletteOverlay">
+    <div id="paletteContent" class="palette-content">
+        <div class="palette-header">
+            <span id="selectedDateDisplay">2026 / 2 / 14 (土)</span>
+            <button class="close-btn" onclick="closePalette()">×</button>
+        </div>
+        <div class="stamp-grid">
+            <button class="stamp s-off" onclick="applyShift('休み', '#ff5e99')">休み</button>
+            <button class="stamp s-req-off" onclick="applyShift('希望休', '#e63946')">希望<br>休</button>
+            <button class="stamp s-0918" onclick="applyShift('0918', '#40c9a2')">09<br>18</button>
+            <button class="stamp s-0919" onclick="applyShift('0919', '#f4a261')">09<br>19</button>
+            <button class="stamp s-0920" onclick="applyShift('0920', '#e76f51')">09<br>20</button>
+            <button class="stamp s-0921" onclick="applyShift('0921', '#4ecdc4')">09<br>21</button>
+            <button class="stamp s-1018" onclick="applyShift('1018', '#1d3557')">10<br>18</button>
+            <button class="stamp s-1019" onclick="applyShift('1019', '#ffca3a')">10<br>19</button>
+            <button class="stamp s-1020" onclick="applyShift('1020', '#457b9d')">10<br>20</button>
+            <button class="stamp s-1621" onclick="applyShift('1621', '#b56576')">16<br>21</button>
+            <button class="stamp s-1721" onclick="applyShift('1721', '#1d3557')">17<br>21</button>
+            <button class="stamp s-work" onclick="applyShift('作業日', '#2a9d8f')">作業日</button>
+            <button class="stamp s-del" onclick="applyShift('', '')">消去</button>
+        </div>
+    </div>
 </div>
 
 <script>
-    let currentShift = { label: '', color: '' };
+    let activeDayElement = null;
 
-    function selectStamp(label, color, el) {
-        currentShift = { label, color };
-        document.querySelectorAll('.stamp').forEach(s => s.classList.remove('selected'));
-        el.classList.add('selected');
+    function openPalette(el, dateText) {
+        activeDayElement = el;
+        document.getElementById('selectedDateDisplay').innerText = dateText;
+        const overlay = document.getElementById('paletteOverlay');
+        const content = document.getElementById('paletteContent');
+        overlay.style.display = 'block';
+        setTimeout(() => content.classList.add('show'), 10);
     }
 
-    function createCalendar(year, month) {
-        const container = document.getElementById('app');
-        const monthDiv = document.createElement('div');
-        monthDiv.innerHTML = `<div class="month-title">${year} / ${month}</div>`;
-        
+    function closePalette() {
+        const content = document.getElementById('paletteContent');
+        content.classList.remove('show');
+        setTimeout(() => { document.getElementById('paletteOverlay').style.display = 'none'; }, 300);
+    }
+
+    function applyShift(label, color) {
+        const area = activeDayElement.querySelector('.shift-area');
+        if (label) {
+            area.innerHTML = `<span class="shift-badge" style="background:${color}">${label}</span>`;
+        } else {
+            area.innerHTML = '';
+        }
+        closePalette();
+    }
+
+    function renderCalendar(year, month) {
+        const container = document.getElementById('calendarApp');
+        const section = document.createElement('div');
+        section.className = 'calendar-section';
         const grid = document.createElement('div');
         grid.className = 'grid';
         
         const firstDay = new Date(year, month - 1, 1).getDay();
         const daysInMonth = new Date(year, month, 0).getDate();
 
-        // 空白埋め
         for (let i = 0; i < firstDay; i++) grid.appendChild(document.createElement('div'));
 
         for (let d = 1; d <= daysInMonth; d++) {
             const dayDiv = document.createElement('div');
+            const dateObj = new Date(year, month - 1, d);
+            const dayOfWeek = ["日","月","火","水","木","金","土"][dateObj.getDay()];
+            
             dayDiv.className = 'day';
-            dayDiv.innerHTML = `<span>${d}</span><div class="shift-area"></div>`;
-            dayDiv.onclick = function() {
-                const area = this.querySelector('.shift-area');
-                if (currentShift.label) {
-                    area.innerHTML = `<span class="shift-label" style="background:${currentShift.color}">${currentShift.label}</span>`;
-                } else {
-                    area.innerHTML = '';
-                }
-            };
+            if(dateObj.getDay() === 0) dayDiv.classList.add('sun');
+            if(dateObj.getDay() === 6) dayDiv.classList.add('sat');
+            
+            dayDiv.innerHTML = `<b>${d}</b><div class="shift-area"></div>`;
+            dayDiv.onclick = () => openPalette(dayDiv, `${year} / ${month} / ${d} (${dayOfWeek})`);
             grid.appendChild(dayDiv);
         }
-        monthDiv.appendChild(grid);
-        container.appendChild(monthDiv);
+        section.appendChild(grid);
+        container.appendChild(section);
     }
 
-    // 2026年2月から5月までの4ヶ月分を生成
-    for (let m = 2; m <= 5; m++) {
-        createCalendar(2026, m);
+    // 今月から4ヶ月分表示
+    const now = new Date();
+    for (let i = 0; i < 4; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+        renderCalendar(d.getFullYear(), d.getMonth() + 1);
     }
 </script>
 </body>
