@@ -6,30 +6,43 @@
     <title>シフト管理</title>
     <style>
         :root { --main-red: #ff5a5f; --bg-gray: #f8f8f8; }
-        body { font-family: sans-serif; margin: 0; background: var(--bg-gray); color: #333; overflow-x: hidden; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif; margin: 0; background: var(--bg-gray); color: #333; overflow-x: hidden; padding-bottom: 50px; }
         
-        /* ヘッダー */
-        header { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: #fff; border-bottom: 1px solid #ddd; sticky: top; }
+        /* ヘッダーの修正: position: stickyを追加 */
+        header { 
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 10px 15px; background: #fff; border-bottom: 1px solid #ddd; 
+            position: sticky; top: 0; z-index: 50;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
         .month-nav { color: var(--main-red); font-weight: bold; font-size: 1.2rem; }
 
         /* カレンダー表示 */
         .calendar-section { background: #fff; margin-bottom: 20px; }
         .grid { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid #eee; }
-        .day { min-height: 70px; border-right: 1px solid #eee; border-top: 1px solid #eee; padding: 4px; position: relative; font-size: 0.75rem; text-align: center; }
+        
+        /* PCでもクリックできるとわかるように cursor: pointer を追加 */
+        .day { 
+            min-height: 70px; border-right: 1px solid #eee; border-top: 1px solid #eee; 
+            padding: 4px; position: relative; font-size: 0.75rem; text-align: center; 
+            cursor: pointer; transition: background 0.1s;
+        }
+        .day:active { background: #f0f0f0; } /* タップ時の反応 */
         .day:nth-child(7n) { border-right: none; }
         .day.sun { color: #ff5a5f; } .day.sat { color: #007aff; }
-        .shift-badge { display: block; margin-top: 4px; padding: 4px 2px; border-radius: 6px; color: #fff; font-size: 0.7rem; font-weight: bold; }
+        .shift-badge { display: block; margin-top: 4px; padding: 4px 2px; border-radius: 6px; color: #fff; font-size: 0.7rem; font-weight: bold; line-height: 1.2; }
 
         /* 入力パレット（モーダル風） */
         #paletteOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 100; }
-        .palette-content { position: fixed; bottom: 0; left: 0; width: 100%; background: #fff; border-radius: 20px 20px 0 0; padding: 20px 10px 40px; box-sizing: border-box; transform: translateY(100%); transition: transform 0.3s; }
+        .palette-content { position: fixed; bottom: 0; left: 0; width: 100%; background: #fff; border-radius: 20px 20px 0 0; padding: 20px 10px 40px; box-sizing: border-box; transform: translateY(100%); transition: transform 0.3s; z-index: 101; }
         .palette-content.show { transform: translateY(0); }
-        .palette-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 0 10px; color: #666; }
+        .palette-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 0 10px; color: #666; font-weight: bold; }
         
         .stamp-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
-        .stamp { aspect-ratio: 1; border-radius: 8px; border: none; color: #fff; font-weight: bold; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .stamp { aspect-ratio: 1; border-radius: 8px; border: none; color: #fff; font-weight: bold; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.1s; }
+        .stamp:active { transform: scale(0.95); }
         
-        /* スタンプの色（画像に基づき設定） */
+        /* スタンプの色 */
         .s-off { background: #ff5e99; } .s-req-off { background: #e63946; }
         .s-0918 { background: #40c9a2; } .s-0919 { background: #f4a261; } .s-0920 { background: #e76f51; }
         .s-0921 { background: #4ecdc4; } .s-1018 { background: #1d3557; } .s-1019 { background: #ffca3a; }
@@ -37,14 +50,14 @@
         .s-1721 { background: #1d3557; } .s-work { background: #2a9d8f; }
         .s-del { background: #fff; color: #333; border: 1px dashed #ccc; }
 
-        .close-btn { font-size: 24px; color: #ccc; border: none; background: none; }
+        .close-btn { font-size: 24px; color: #ccc; border: none; background: none; cursor: pointer; padding: 0 10px; }
     </style>
 </head>
 <body>
 
 <header>
     <div style="color:var(--main-red)">MENU</div>
-    <div class="month-nav">＜ 2026 / 2 ＞</div>
+    <div class="month-nav">2026 Shift</div>
     <div style="font-size:1.5rem; color:var(--main-red)">＋</div>
 </header>
 
@@ -53,7 +66,7 @@
 <div id="paletteOverlay">
     <div id="paletteContent" class="palette-content">
         <div class="palette-header">
-            <span id="selectedDateDisplay">2026 / 2 / 14 (土)</span>
+            <span id="selectedDateDisplay">日付を選択</span>
             <button class="close-btn" onclick="closePalette()">×</button>
         </div>
         <div class="stamp-grid">
@@ -77,63 +90,99 @@
 <script>
     let activeDayElement = null;
 
+    // パレットを開く
     function openPalette(el, dateText) {
+        console.log("Open Palette for:", dateText); // デバッグ用ログ
         activeDayElement = el;
         document.getElementById('selectedDateDisplay').innerText = dateText;
         const overlay = document.getElementById('paletteOverlay');
         const content = document.getElementById('paletteContent');
         overlay.style.display = 'block';
+        // アニメーション用
         setTimeout(() => content.classList.add('show'), 10);
     }
 
+    // パレットを閉じる
     function closePalette() {
         const content = document.getElementById('paletteContent');
         content.classList.remove('show');
         setTimeout(() => { document.getElementById('paletteOverlay').style.display = 'none'; }, 300);
     }
 
+    // シフトを反映する
     function applyShift(label, color) {
+        if (!activeDayElement) return;
+        
         const area = activeDayElement.querySelector('.shift-area');
         if (label) {
             area.innerHTML = `<span class="shift-badge" style="background:${color}">${label}</span>`;
         } else {
-            area.innerHTML = '';
+            area.innerHTML = ''; // 消去
         }
+        
+        // ★ここで将来的にGASへデータを送信する処理が入ります★
+        // saveDataToGas(...);
+        
         closePalette();
     }
 
+    // カレンダー描画関数
     function renderCalendar(year, month) {
         const container = document.getElementById('calendarApp');
+        
+        // 月ごとのセクション作成
         const section = document.createElement('div');
         section.className = 'calendar-section';
+        
+        // 月見出し
+        const title = document.createElement('div');
+        title.style.padding = "10px";
+        title.style.fontWeight = "bold";
+        title.style.color = "#666";
+        title.style.borderBottom = "1px solid #eee";
+        title.innerText = `${year} / ${month}`;
+        section.appendChild(title);
+
+        // グリッド作成
         const grid = document.createElement('div');
         grid.className = 'grid';
         
-        const firstDay = new Date(year, month - 1, 1).getDay();
-        const daysInMonth = new Date(year, month, 0).getDate();
+        const firstDay = new Date(year, month - 1, 1).getDay(); // 1日の曜日
+        const daysInMonth = new Date(year, month, 0).getDate(); // 月の日数
 
-        for (let i = 0; i < firstDay; i++) grid.appendChild(document.createElement('div'));
+        // 月初の空白セル
+        for (let i = 0; i < firstDay; i++) {
+            grid.appendChild(document.createElement('div'));
+        }
 
+        // 日付セル
         for (let d = 1; d <= daysInMonth; d++) {
             const dayDiv = document.createElement('div');
             const dateObj = new Date(year, month - 1, d);
-            const dayOfWeek = ["日","月","火","水","木","金","土"][dateObj.getDay()];
+            const weekChars = ["日","月","火","水","木","金","土"];
+            const dayOfWeek = weekChars[dateObj.getDay()];
             
             dayDiv.className = 'day';
             if(dateObj.getDay() === 0) dayDiv.classList.add('sun');
             if(dateObj.getDay() === 6) dayDiv.classList.add('sat');
             
             dayDiv.innerHTML = `<b>${d}</b><div class="shift-area"></div>`;
-            dayDiv.onclick = () => openPalette(dayDiv, `${year} / ${month} / ${d} (${dayOfWeek})`);
+            
+            // クリックイベントの設定（バッククォートに注意）
+            dayDiv.onclick = function() {
+                openPalette(this, `${year} / ${month} / ${d} (${dayOfWeek})`);
+            };
+            
             grid.appendChild(dayDiv);
         }
         section.appendChild(grid);
         container.appendChild(section);
     }
 
-    // 今月から4ヶ月分表示
+    // 今月から4ヶ月分を表示するループ
     const now = new Date();
     for (let i = 0; i < 4; i++) {
+        // 月の計算（年またぎもDateオブジェクトが自動処理）
         const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
         renderCalendar(d.getFullYear(), d.getMonth() + 1);
     }
