@@ -8,7 +8,7 @@
         :root { --main-red: #ff5a5f; --bg-gray: #f8f8f8; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif; margin: 0; background: var(--bg-gray); color: #333; overflow-x: hidden; padding-bottom: 50px; }
         
-        /* ヘッダーの修正: position: stickyを追加 */
+        /* ヘッダー */
         header { 
             display: flex; justify-content: space-between; align-items: center; 
             padding: 10px 15px; background: #fff; border-bottom: 1px solid #ddd; 
@@ -21,18 +21,17 @@
         .calendar-section { background: #fff; margin-bottom: 20px; }
         .grid { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid #eee; }
         
-        /* PCでもクリックできるとわかるように cursor: pointer を追加 */
         .day { 
             min-height: 70px; border-right: 1px solid #eee; border-top: 1px solid #eee; 
             padding: 4px; position: relative; font-size: 0.75rem; text-align: center; 
             cursor: pointer; transition: background 0.1s;
         }
-        .day:active { background: #f0f0f0; } /* タップ時の反応 */
+        .day:active { background: #f0f0f0; }
         .day:nth-child(7n) { border-right: none; }
         .day.sun { color: #ff5a5f; } .day.sat { color: #007aff; }
         .shift-badge { display: block; margin-top: 4px; padding: 4px 2px; border-radius: 6px; color: #fff; font-size: 0.7rem; font-weight: bold; line-height: 1.2; }
 
-        /* 入力パレット（モーダル風） */
+        /* 入力パレット */
         #paletteOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 100; }
         .palette-content { position: fixed; bottom: 0; left: 0; width: 100%; background: #fff; border-radius: 20px 20px 0 0; padding: 20px 10px 40px; box-sizing: border-box; transform: translateY(100%); transition: transform 0.3s; z-index: 101; }
         .palette-content.show { transform: translateY(0); }
@@ -51,6 +50,9 @@
         .s-del { background: #fff; color: #333; border: 1px dashed #ccc; }
 
         .close-btn { font-size: 24px; color: #ccc; border: none; background: none; cursor: pointer; padding: 0 10px; }
+        
+        /* ローディング表示 */
+        #loading { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.7); color: #fff; padding: 10px 20px; border-radius: 5px; z-index: 200; display: none; }
     </style>
 </head>
 <body>
@@ -62,6 +64,7 @@
 </header>
 
 <div id="calendarApp"></div>
+<div id="loading">データ読込中...</div>
 
 <div id="paletteOverlay">
     <div id="paletteContent" class="palette-content">
@@ -88,53 +91,129 @@
 </div>
 
 <script>
-    let activeDayElement = null;
+    // ★GASのURLを設定
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbz3Cnb2C_o8xjb9I_I_0jfgNXMhmo_TzcLh76MQ8FqYg9lYRx3VdEo4OdNVxpJO2fYl/exec";
 
-    // パレットを開く
-    function openPalette(el, dateText) {
-        console.log("Open Palette for:", dateText); // デバッグ用ログ
+    // ユーザーIDの取得（なければ生成して保存）
+    function getUserId() {
+        let id = localStorage.getItem('shift_app_user_id');
+        if (!id) {
+            id = 'user_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('shift_app_user_id', id);
+        }
+        return id;
+    }
+    const CURRENT_USER_ID = getUserId();
+    console.log("User ID:", CURRENT_USER_ID);
+
+    let activeDayElement = null;
+    let activeDateString = ""; // YYYY-MM-DD形式
+
+    // ページ読み込み時にデータを取得
+    window.onload = function() {
+        renderAllCalendars();
+        fetchDataFromGas();
+    };
+
+    function openPalette(el, dateText, dateIso) {
         activeDayElement = el;
+        activeDateString = dateIso; // 保存用の日付(YYYY-MM-DD)
         document.getElementById('selectedDateDisplay').innerText = dateText;
         const overlay = document.getElementById('paletteOverlay');
         const content = document.getElementById('paletteContent');
         overlay.style.display = 'block';
-        // アニメーション用
         setTimeout(() => content.classList.add('show'), 10);
     }
 
-    // パレットを閉じる
     function closePalette() {
         const content = document.getElementById('paletteContent');
         content.classList.remove('show');
         setTimeout(() => { document.getElementById('paletteOverlay').style.display = 'none'; }, 300);
     }
 
-    // シフトを反映する
+    // シフトを反映＆保存
     function applyShift(label, color) {
         if (!activeDayElement) return;
         
+        // 1. 画面上の更新（UXのため即時反映）
         const area = activeDayElement.querySelector('.shift-area');
         if (label) {
             area.innerHTML = `<span class="shift-badge" style="background:${color}">${label}</span>`;
         } else {
-            area.innerHTML = ''; // 消去
+            area.innerHTML = '';
         }
         
-        // ★ここで将来的にGASへデータを送信する処理が入ります★
-        // saveDataToGas(...);
+        // 2. データの送信（裏側で実行）
+        saveDataToGas(activeDateString, label, color);
         
         closePalette();
     }
 
-    // カレンダー描画関数
+    // GASへのデータ送信（POST）
+    function saveDataToGas(date, label, color) {
+        const data = {
+            user_id: CURRENT_USER_ID,
+            user_name: "テストユーザー", // 後でLINE名に変更
+            date: date,
+            shift_label: label,
+            color: color
+        };
+
+        // sendBeaconは使わずfetchで送信 (no-corsは使わずtext/plainで送るのがGAS定石)
+        fetch(GAS_URL, {
+            method: 'POST',
+            body: JSON.stringify(data),
+            mode: 'no-cors', // レスポンスを待たずに完了させる
+            headers: { 'Content-Type': 'text/plain' }
+        }).then(() => {
+            console.log("Saved to GAS");
+        }).catch(err => console.error("Save Error:", err));
+    }
+
+    // GASからのデータ取得（GET）
+    function fetchDataFromGas() {
+        const loading = document.getElementById('loading');
+        loading.style.display = 'block';
+
+        fetch(GAS_URL)
+            .then(response => response.json())
+            .then(data => {
+                console.log("Loaded data:", data);
+                
+                // 取得したデータをカレンダーに反映
+                data.forEach(item => {
+                    // 自分のデータのみ表示（IDでフィルタ）
+                    if (item.user_id === CURRENT_USER_ID) {
+                        // 日付(YYYY-MM-DD)に対応する要素を探す
+                        const targetDiv = document.querySelector(`.day[data-date="${item.date}"] .shift-area`);
+                        if (targetDiv) {
+                            targetDiv.innerHTML = `<span class="shift-badge" style="background:${item.color}">${item.shift_label}</span>`;
+                        }
+                    }
+                });
+                loading.style.display = 'none';
+            })
+            .catch(err => {
+                console.error("Load Error:", err);
+                loading.style.display = 'none';
+            });
+    }
+
+    function renderAllCalendars() {
+        const container = document.getElementById('calendarApp');
+        container.innerHTML = ""; // クリア
+        const now = new Date();
+        for (let i = 0; i < 4; i++) {
+            const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+            renderCalendar(d.getFullYear(), d.getMonth() + 1);
+        }
+    }
+
     function renderCalendar(year, month) {
         const container = document.getElementById('calendarApp');
-        
-        // 月ごとのセクション作成
         const section = document.createElement('div');
         section.className = 'calendar-section';
         
-        // 月見出し
         const title = document.createElement('div');
         title.style.padding = "10px";
         title.style.fontWeight = "bold";
@@ -143,48 +222,45 @@
         title.innerText = `${year} / ${month}`;
         section.appendChild(title);
 
-        // グリッド作成
         const grid = document.createElement('div');
         grid.className = 'grid';
         
-        const firstDay = new Date(year, month - 1, 1).getDay(); // 1日の曜日
-        const daysInMonth = new Date(year, month, 0).getDate(); // 月の日数
+        const firstDay = new Date(year, month - 1, 1).getDay();
+        const daysInMonth = new Date(year, month, 0).getDate();
 
-        // 月初の空白セル
         for (let i = 0; i < firstDay; i++) {
             grid.appendChild(document.createElement('div'));
         }
 
-        // 日付セル
         for (let d = 1; d <= daysInMonth; d++) {
             const dayDiv = document.createElement('div');
             const dateObj = new Date(year, month - 1, d);
+            
+            // ISO日付文字列作成 (YYYY-MM-DD) ※パディング処理
+            const y = dateObj.getFullYear();
+            const m = ('0' + (dateObj.getMonth() + 1)).slice(-2);
+            const da = ('0' + dateObj.getDate()).slice(-2);
+            const isoDate = `${y}-${m}-${da}`;
+            
             const weekChars = ["日","月","火","水","木","金","土"];
             const dayOfWeek = weekChars[dateObj.getDay()];
             
             dayDiv.className = 'day';
+            // データ検索用に属性を追加
+            dayDiv.setAttribute('data-date', isoDate);
+            
             if(dateObj.getDay() === 0) dayDiv.classList.add('sun');
             if(dateObj.getDay() === 6) dayDiv.classList.add('sat');
             
             dayDiv.innerHTML = `<b>${d}</b><div class="shift-area"></div>`;
-            
-            // クリックイベントの設定（バッククォートに注意）
             dayDiv.onclick = function() {
-                openPalette(this, `${year} / ${month} / ${d} (${dayOfWeek})`);
+                openPalette(this, `${year} / ${month} / ${d} (${dayOfWeek})`, isoDate);
             };
             
             grid.appendChild(dayDiv);
         }
         section.appendChild(grid);
         container.appendChild(section);
-    }
-
-    // 今月から4ヶ月分を表示するループ
-    const now = new Date();
-    for (let i = 0; i < 4; i++) {
-        // 月の計算（年またぎもDateオブジェクトが自動処理）
-        const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-        renderCalendar(d.getFullYear(), d.getMonth() + 1);
     }
 </script>
 </body>
