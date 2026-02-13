@@ -91,7 +91,7 @@
 </div>
 
 <script>
-    // ★GASのURLを設定
+    // ★現在のGASのURL
     const GAS_URL = "https://script.google.com/macros/s/AKfycbz3Cnb2C_o8xjb9I_I_0jfgNXMhmo_TzcLh76MQ8FqYg9lYRx3VdEo4OdNVxpJO2fYl/exec";
 
     // ユーザーIDの取得（なければ生成して保存）
@@ -117,7 +117,7 @@
 
     function openPalette(el, dateText, dateIso) {
         activeDayElement = el;
-        activeDateString = dateIso; // 保存用の日付(YYYY-MM-DD)
+        activeDateString = dateIso; 
         document.getElementById('selectedDateDisplay').innerText = dateText;
         const overlay = document.getElementById('paletteOverlay');
         const content = document.getElementById('paletteContent');
@@ -135,7 +135,7 @@
     function applyShift(label, color) {
         if (!activeDayElement) return;
         
-        // 1. 画面上の更新（UXのため即時反映）
+        // 1. 画面上の更新
         const area = activeDayElement.querySelector('.shift-area');
         if (label) {
             area.innerHTML = `<span class="shift-badge" style="background:${color}">${label}</span>`;
@@ -143,7 +143,7 @@
             area.innerHTML = '';
         }
         
-        // 2. データの送信（裏側で実行）
+        // 2. データの送信
         saveDataToGas(activeDateString, label, color);
         
         closePalette();
@@ -153,24 +153,23 @@
     function saveDataToGas(date, label, color) {
         const data = {
             user_id: CURRENT_USER_ID,
-            user_name: "テストユーザー", // 後でLINE名に変更
+            user_name: "テストユーザー", 
             date: date,
             shift_label: label,
             color: color
         };
 
-        // sendBeaconは使わずfetchで送信 (no-corsは使わずtext/plainで送るのがGAS定石)
         fetch(GAS_URL, {
             method: 'POST',
             body: JSON.stringify(data),
-            mode: 'no-cors', // レスポンスを待たずに完了させる
+            mode: 'no-cors',
             headers: { 'Content-Type': 'text/plain' }
         }).then(() => {
             console.log("Saved to GAS");
         }).catch(err => console.error("Save Error:", err));
     }
 
-    // GASからのデータ取得（GET）
+    // GASからのデータ取得（GET） ★ここで「T」を消す強行突破をしています！
     function fetchDataFromGas() {
         const loading = document.getElementById('loading');
         loading.style.display = 'block';
@@ -180,12 +179,18 @@
             .then(data => {
                 console.log("Loaded data:", data);
                 
-                // 取得したデータをカレンダーに反映
                 data.forEach(item => {
-                    // 自分のデータのみ表示（IDでフィルタ）
+                    // 自分のデータのみ表示
                     if (item.user_id === CURRENT_USER_ID) {
-                        // 日付(YYYY-MM-DD)に対応する要素を探す
-                        const targetDiv = document.querySelector(`.day[data-date="${item.date}"] .shift-area`);
+                        
+                        // ★「T」以降の余計な時間を切り捨てる！★
+                        // 例: "2026-02-02T08:00:00.000Z" -> "2026-02-02"
+                        let cleanDate = item.date;
+                        if (item.date.includes('T')) {
+                            cleanDate = item.date.split('T')[0];
+                        }
+                        
+                        const targetDiv = document.querySelector(`.day[data-date="${cleanDate}"] .shift-area`);
                         if (targetDiv) {
                             targetDiv.innerHTML = `<span class="shift-badge" style="background:${item.color}">${item.shift_label}</span>`;
                         }
@@ -201,7 +206,7 @@
 
     function renderAllCalendars() {
         const container = document.getElementById('calendarApp');
-        container.innerHTML = ""; // クリア
+        container.innerHTML = ""; 
         const now = new Date();
         for (let i = 0; i < 4; i++) {
             const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
@@ -236,7 +241,6 @@
             const dayDiv = document.createElement('div');
             const dateObj = new Date(year, month - 1, d);
             
-            // ISO日付文字列作成 (YYYY-MM-DD) ※パディング処理
             const y = dateObj.getFullYear();
             const m = ('0' + (dateObj.getMonth() + 1)).slice(-2);
             const da = ('0' + dateObj.getDate()).slice(-2);
@@ -246,7 +250,6 @@
             const dayOfWeek = weekChars[dateObj.getDay()];
             
             dayDiv.className = 'day';
-            // データ検索用に属性を追加
             dayDiv.setAttribute('data-date', isoDate);
             
             if(dateObj.getDay() === 0) dayDiv.classList.add('sun');
