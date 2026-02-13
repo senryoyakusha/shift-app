@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>シフト入力アプリ</title>
+    <style>
+        :root { --main-bg: #fff; --stamp-0920: #FF7F50; --stamp-off: #FF69B4; --stamp-work: #2E8B57; }
+        body { font-family: sans-serif; margin: 0; padding-bottom: 100px; background: #fdfdfd; }
+        header { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; position: sticky; top: 0; background: #fff; z-index: 10; }
+        
+        /* カレンダー表示 */
+        .calendar-container { padding: 10px; }
+        .month-title { text-align: center; font-weight: bold; font-size: 1.2rem; color: #ff7f7f; margin: 10px 0; }
+        .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; background: #eee; border: 1px solid #eee; }
+        .day { background: #fff; min-height: 80px; padding: 5px; position: relative; font-size: 0.8rem; }
+        .day.sun { color: red; } .day.sat { color: blue; }
+        .shift-label { display: block; margin-top: 5px; padding: 2px; border-radius: 4px; color: #fff; text-align: center; font-size: 0.7rem; font-weight: bold; }
+
+        /* スタンプパレット */
+        .palette { position: fixed; bottom: 0; width: 100%; background: #eee; display: flex; justify-content: space-around; padding: 15px 0; border-top: 2px solid #ddd; }
+        .stamp { width: 60px; height: 35px; border-radius: 10px; border: 2px solid transparent; color: #fff; font-weight: bold; font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .stamp.selected { border-color: #333; transform: scale(1.1); box-shadow: 0 0 5px rgba(0,0,0,0.3); }
+    </style>
+</head>
+<body>
+
+<header>
+    <div style="color:red">MENU</div>
+    <div id="currentMonth">2026 / 2</div>
+    <div style="font-size:1.5rem; color:red">＋</div>
+</header>
+
+<div id="app" class="calendar-container">
+    </div>
+
+<div class="palette">
+    <div class="stamp" style="background:var(--stamp-0920)" onclick="selectStamp('0920', 'var(--stamp-0920)', this)">0920</div>
+    <div class="stamp" style="background:var(--stamp-off)" onclick="selectStamp('休み', 'var(--stamp-off)', this)">休み</div>
+    <div class="stamp" style="background:var(--stamp-work)" onclick="selectStamp('作業日', 'var(--stamp-work)', this)">作業日</div>
+    <div class="stamp" style="background:#ccc; color:#333" onclick="selectStamp('', '', this)">消去</div>
+</div>
+
+<script>
+    let currentShift = { label: '', color: '' };
+
+    function selectStamp(label, color, el) {
+        currentShift = { label, color };
+        document.querySelectorAll('.stamp').forEach(s => s.classList.remove('selected'));
+        el.classList.add('selected');
+    }
+
+    function createCalendar(year, month) {
+        const container = document.getElementById('app');
+        const monthDiv = document.createElement('div');
+        monthDiv.innerHTML = `<div class="month-title">${year} / ${month}</div>`;
+        
+        const grid = document.createElement('div');
+        grid.className = 'grid';
+        
+        const firstDay = new Date(year, month - 1, 1).getDay();
+        const daysInMonth = new Date(year, month, 0).getDate();
+
+        // 空白埋め
+        for (let i = 0; i < firstDay; i++) grid.appendChild(document.createElement('div'));
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dayDiv = document.createElement('div');
+            dayDiv.className = 'day';
+            dayDiv.innerHTML = `<span>${d}</span><div class="shift-area"></div>`;
+            dayDiv.onclick = function() {
+                const area = this.querySelector('.shift-area');
+                if (currentShift.label) {
+                    area.innerHTML = `<span class="shift-label" style="background:${currentShift.color}">${currentShift.label}</span>`;
+                } else {
+                    area.innerHTML = '';
+                }
+            };
+            grid.appendChild(dayDiv);
+        }
+        monthDiv.appendChild(grid);
+        container.appendChild(monthDiv);
+    }
+
+    // 2026年2月から5月までの4ヶ月分を生成
+    for (let m = 2; m <= 5; m++) {
+        createCalendar(2026, m);
+    }
+</script>
+</body>
+</html>
