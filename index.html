@@ -33,12 +33,24 @@
         .month-total { font-size: 0.85rem; color: var(--main-red); font-weight: bold; background: #ffeeee; padding: 4px 10px; border-radius: 12px; }
 
         .grid { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid #eee; }
-        .day { min-height: 70px; border-right: 1px solid #eee; border-top: 1px solid #eee; padding: 4px; position: relative; font-size: 0.75rem; text-align: center; cursor: pointer; transition: background 0.1s; }
-        .day:active, .day.active-focus { background: #ffebeb; }
-        .day:nth-child(7n) { border-right: none; }
-        .day.sun { color: #ff5a5f; } .day.sat { color: #007aff; }
         
-        /* ★ 2段改行に対応するため、white-spaceの制限を解除し、line-heightを調整 */
+        /* ★ 曜日のヘッダー用スタイルを追加 */
+        .day-header { text-align: center; font-size: 0.7rem; font-weight: bold; padding: 6px 0; background: #fff; border-bottom: 1px solid #eee; border-right: 1px solid #eee; color: #666; }
+        .day-header:nth-child(7n) { border-right: none; }
+        .day-header.sun { color: #ff5a5f; }
+        .day-header.sat { color: #007aff; }
+
+        .day { min-height: 70px; border-right: 1px solid #eee; border-top: 1px solid #eee; padding: 4px; position: relative; font-size: 0.75rem; text-align: center; cursor: pointer; transition: background 0.1s; }
+        .day:nth-child(7n) { border-right: none; }
+        .day.sun { color: #ff5a5f; } 
+        .day.sat { color: #007aff; }
+        /* ★ 祝日の赤文字対応 */
+        .holiday { color: #ff5a5f !important; }
+        /* ★ 今日の背景色（薄いブルー） */
+        .today { background-color: #e6f7ff; }
+        /* ★ 選択中のハイライト（今日の色より優先させる） */
+        .day:active, .day.active-focus { background: #ffebeb !important; }
+
         .shift-badge { display: block; margin-top: 2px; padding: 4px 2px; border-radius: 4px; color: #fff; font-size: 0.65rem; font-weight: bold; line-height: 1.2; text-align: center; word-break: break-word; }
 
         .table-wrap { overflow-x: auto; max-height: calc(100vh - 220px); }
@@ -94,9 +106,7 @@
     <div style="font-weight:bold;">
         <img src="logo.png" alt="Logo" style="height: 80px; object-fit: contain; vertical-align: middle;">
     </div>
-    
     <div class="month-nav">2026</div>
-    
     <div class="header-icons">
         <div class="icon-btn" onclick="fetchDataFromGas()">🔄</div>
         <div class="icon-btn" onclick="openSettings()">⚙️</div>
@@ -203,11 +213,28 @@
     let globalUsersData = [];
     let activeDayElement = null;
     let activeDateString = "";
+    
+    // ★ 日本の祝日データを格納する変数
+    let globalHolidays = {};
 
     window.onload = function() {
+        fetchHolidays(); // ★ 祝日データの取得を開始
         renderAllPersonalCalendars();
         initializeLiff();
     };
+
+    // ★ 祝日APIからデータを取得する関数
+    function fetchHolidays() {
+        fetch('https://holidays-jp.github.io/api/v1/date.json')
+            .then(res => res.json())
+            .then(data => {
+                globalHolidays = data;
+                // 祝日データが取れたらカレンダーを再描画して赤色を反映
+                renderAllPersonalCalendars();
+                if (currentView === 'shared') renderSharedCalendars();
+            })
+            .catch(err => console.error("祝日データの取得に失敗しました:", err));
+    }
 
     function initializeLiff() {
         document.getElementById('loading').style.display = 'block';
@@ -325,10 +352,8 @@
         myShifts.forEach(shift => {
             const targetDiv = document.querySelector(`.day[data-date="${shift.date}"] .shift-area`);
             if (targetDiv) {
-                // ★ 画面表示の時だけ、店舗名と数字の間で改行タグを入れる処理を追加
                 let displayLabel = shift.shift_label;
                 displayLabel = displayLabel.replace(/^(annee|yoki\.)(\d{4})$/, "$1<br>$2");
-                
                 targetDiv.innerHTML = `<span class="shift-badge" style="background:${shift.color}">${displayLabel}</span>`;
             }
             const monthKey = shift.date.substring(0, 7);
@@ -408,7 +433,12 @@
             if (maxCount >= 5) { rowClass = "row-over"; } 
             else if (maxCount <= 3) { rowClass = "row-short"; }
 
+            // ★ 共有カレンダー：祝日なら dateClass に holiday を追加
             let dateClass = "date-col" + (dayOfWeek === 0 ? " sun" : "") + (dayOfWeek === 6 ? " sat" : "");
+            if (globalHolidays[isoDate]) {
+                dateClass += " holiday";
+            }
+
             tr.className = rowClass;
             tr.innerHTML = `<td class="${dateClass} ${rowClass}">${m}/${da} <span style="font-size:0.7em">(${weekChars[dayOfWeek]})</span></td>` + rowHtml;
             tbody.appendChild(tr);
@@ -451,14 +481,39 @@
         section.appendChild(title);
         
         const grid = document.createElement('div'); grid.className = 'grid';
+        const weekChars = ["日","月","火","水","木","金","土"];
+        
+        // ★ 個人カレンダー：曜日ヘッダーの描画
+        weekChars.forEach((w, idx) => {
+            const dHeader = document.createElement('div');
+            dHeader.className = 'day-header' + (idx === 0 ? ' sun' : (idx === 6 ? ' sat' : ''));
+            dHeader.innerText = w;
+            grid.appendChild(dHeader);
+        });
+
+        // 今日の日付を取得（ハイライト用）
+        const todayObj = new Date();
+        const todayIso = `${todayObj.getFullYear()}-${('0' + (todayObj.getMonth() + 1)).slice(-2)}-${('0' + todayObj.getDate()).slice(-2)}`;
+
         const firstDay = new Date(year, month - 1, 1).getDay(); const daysInMonth = new Date(year, month, 0).getDate();
         for (let i = 0; i < firstDay; i++) { grid.appendChild(document.createElement('div')); }
         for (let d = 1; d <= daysInMonth; d++) {
             const dateObj = new Date(year, month - 1, d);
             const isoDate = `${dateObj.getFullYear()}-${('0' + (dateObj.getMonth() + 1)).slice(-2)}-${('0' + dateObj.getDate()).slice(-2)}`;
-            const dayOfWeek = ["日","月","火","水","木","金","土"][dateObj.getDay()];
+            const dayOfWeek = weekChars[dateObj.getDay()];
+            
             const dayDiv = document.createElement('div');
-            dayDiv.className = 'day' + (dateObj.getDay() === 0 ? ' sun' : '') + (dateObj.getDay() === 6 ? ' sat' : ''); 
+            
+            // ★ クラス名の判定（日曜、土曜、祝日、今日）
+            let dClass = 'day' + (dateObj.getDay() === 0 ? ' sun' : '') + (dateObj.getDay() === 6 ? ' sat' : ''); 
+            if (globalHolidays[isoDate]) {
+                dClass += ' holiday'; // 祝日なら赤字クラスを追加
+            }
+            if (isoDate === todayIso) {
+                dClass += ' today'; // 今日なら背景色クラスを追加
+            }
+
+            dayDiv.className = dClass;
             dayDiv.setAttribute('data-date', isoDate);
             dayDiv.innerHTML = `<b>${d}</b><div class="shift-area"></div>`;
             dayDiv.onclick = function() { openPalette(this, `${year} / ${month} / ${d} (${dayOfWeek})`, isoDate); };
@@ -552,5 +607,3 @@
 </script>
 </body>
 </html>
-
-
