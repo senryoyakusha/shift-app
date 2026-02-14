@@ -51,13 +51,14 @@
         .total-row .date-col { background-color: #fff9e6 !important; color: #d97706; }
 
         #paletteOverlay { display: none; position: fixed; bottom: 70px; left: 0; width: 100%; height: 38vh; background: #fff; z-index: 100; box-shadow: 0 -5px 15px rgba(0,0,0,0.1); border-radius: 15px 15px 0 0; }
-        .palette-content { height: 100%; padding: 10px 15px 15px; box-sizing: border-box; overflow-y: auto; }
+        .palette-content { height: 100%; padding: 10px 10px 15px; box-sizing: border-box; overflow-y: auto; }
         .palette-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
         .selected-date { font-weight: bold; color: var(--main-red); font-size: 1rem; }
         
         .palette-section-title { font-size: 0.75rem; font-weight: bold; margin: 10px 0 5px; color: #666; }
-        .stamp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-        .stamp { padding: 8px 0; border-radius: 6px; border: none; color: #fff; font-weight: bold; font-size: 0.75rem; text-align: center; cursor: pointer; transition: 0.1s; line-height: 1.2; }
+        /* ★ 5列に変更 */
+        .stamp-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+        .stamp { padding: 8px 0; border-radius: 6px; border: none; color: #fff; font-weight: bold; font-size: 0.7rem; text-align: center; cursor: pointer; transition: 0.1s; line-height: 1.2; }
         .stamp:active { transform: scale(0.9); }
         .s-del { background: #fff; color: #333; border: 1px dashed #ccc; }
         .close-btn { font-size: 24px; color: #aaa; border: none; background: none; cursor: pointer; padding: 0 5px; }
@@ -69,7 +70,6 @@
         .nav-item span { display: block; font-size: 1.4rem; margin-bottom: 2px; }
         body.palette-open { padding-bottom: calc(38vh + 70px); }
 
-        /* ★ カレンダー連携設定のモーダルデザイン */
         #settingsOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 300; }
         .settings-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; width: 90%; max-width: 400px; border-radius: 15px; padding: 25px 20px; box-sizing: border-box; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
         .settings-header { font-weight: bold; font-size: 1.2rem; color: #333; margin-bottom: 10px; text-align: center; }
@@ -123,10 +123,13 @@
             <div class="stamp-grid">
                 <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee0919', 'var(--annee-g1)', 'annee')">annee<br>0919</button>
                 <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee0920', 'var(--annee-g1)', 'annee')">annee<br>0920</button>
+                <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee0921', 'var(--annee-g1)', 'annee')">annee<br>0921</button>
                 <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee1019', 'var(--annee-g1)', 'annee')">annee<br>1019</button>
                 <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee1020', 'var(--annee-g1)', 'annee')">annee<br>1020</button>
+                
                 <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee0916', 'var(--annee-g2)', 'annee')">annee<br>0916</button>
                 <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee0917', 'var(--annee-g2)', 'annee')">annee<br>0917</button>
+                <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee1116', 'var(--annee-g2)', 'annee')">annee<br>1116</button>
                 <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee1621', 'var(--annee-g2)', 'annee')">annee<br>1621</button>
                 <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee1721', 'var(--annee-g2)', 'annee')">annee<br>1721</button>
             </div>
@@ -137,10 +140,13 @@
             <div class="stamp-grid">
                 <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.0919', 'var(--yoki-g1)', 'yoki.')">yoki.<br>0919</button>
                 <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.0920', 'var(--yoki-g1)', 'yoki.')">yoki.<br>0920</button>
+                <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.0921', 'var(--yoki-g1)', 'yoki.')">yoki.<br>0921</button>
                 <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.1019', 'var(--yoki-g1)', 'yoki.')">yoki.<br>1019</button>
                 <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.1020', 'var(--yoki-g1)', 'yoki.')">yoki.<br>1020</button>
+                
                 <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.0916', 'var(--yoki-g2)', 'yoki.')">yoki.<br>0916</button>
                 <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.0917', 'var(--yoki-g2)', 'yoki.')">yoki.<br>0917</button>
+                <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.1116', 'var(--yoki-g2)', 'yoki.')">yoki.<br>1116</button>
                 <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.1621', 'var(--yoki-g2)', 'yoki.')">yoki.<br>1621</button>
                 <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.1721', 'var(--yoki-g2)', 'yoki.')">yoki.<br>1721</button>
             </div>
@@ -163,14 +169,11 @@
         <div class="settings-desc">
             アプリのシフト情報を、GoogleカレンダーやTimeTree、iPhone標準カレンダーに自動で同期できます。
         </div>
-        
         <div class="settings-radio">
             <label><input type="radio" name="sync_mode" value="all" checked> すべてのシフトを連携する</label>
             <label><input type="radio" name="sync_mode" value="common"> 休み・作業日など共通のみ連携</label>
         </div>
-        
         <button class="btn-generate" onclick="generateIcalUrl()">同期URLを発行する</button>
-        
         <div id="icalUrlContainer" class="url-box">
             <div style="font-size:0.75rem; color:#666; margin-bottom:8px;">
                 以下のURLをコピーして、外部カレンダーアプリの「URLで照会/追加」画面に貼り付けてください。
@@ -300,7 +303,8 @@
         if (targetUsers.length === 0) return;
 
         const now = new Date();
-        for (let i = 0; i < 4; i++) {
+        // ★ 5ヶ月分描画するように変更（4から5へ）
+        for (let i = 0; i < 5; i++) {
             const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
             createSharedTable(d.getFullYear(), d.getMonth() + 1, targetUsers, container);
         }
@@ -331,26 +335,39 @@
             const isoDate = `${y}-${m}-${da}`;
             const tr = document.createElement('tr');
             
-            let rowHtml = ""; let dailyScoreSum = 0;
+            let rowHtml = ""; 
+            // ★ 同時滞在人数をカウントする配列（0時〜23時まで用意）
+            let hourlyCounts = new Array(24).fill(0);
 
             targetUsers.forEach(u => {
                 const shift = globalShiftData.find(item => item.user_id === u.id && item.date === isoDate && (item.store === currentStore || item.store === 'common'));
                 let cellHtml = "<td></td>";
                 if (shift) {
                     cellHtml = `<td><span class="shift-badge" style="background:${shift.color}; max-width: 45px; margin:0 auto; font-size:0.6rem;">${shift.shift_label.replace('annee','').replace('yoki.','')}</span></td>`;
-                    let score = Number(shift.attendance_score);
-                    if (isNaN(score)) {
-                        let h = calcShiftData(shift.shift_label);
-                        score = (h >= 9) ? 1 : (h > 0 ? 0.5 : 0);
+                    
+                    // ★ タイムライン人数のカウント処理
+                    if (shift.store !== 'common') {
+                        let match = shift.shift_label.match(/(\d{2})(\d{2})/);
+                        if (match) {
+                            let start = parseInt(match[1], 10);
+                            let end = parseInt(match[2], 10);
+                            for (let h = start; h < end; h++) {
+                                if (h >= 0 && h < 24) hourlyCounts[h]++;
+                            }
+                        }
                     }
-                    dailyScoreSum += score;
                 }
                 rowHtml += cellHtml;
             });
 
+            // ★ 同時滞在人数のMax値を基準に背景色を決定
+            let maxCount = Math.max(...hourlyCounts);
             let rowClass = "";
-            if (dailyScoreSum >= 4) rowClass = "row-over"; 
-            else if (dailyScoreSum <= 3) rowClass = "row-short"; 
+            if (maxCount >= 5) {
+                rowClass = "row-over"; // 5人以上被る時間があれば赤！
+            } else if (maxCount <= 3) {
+                rowClass = "row-short"; // 1日のMaxが3人以下なら青！
+            }
 
             let dateClass = "date-col" + (dayOfWeek === 0 ? " sun" : "") + (dayOfWeek === 6 ? " sat" : "");
             tr.className = rowClass;
@@ -380,7 +397,8 @@
         const container = document.getElementById('calendarApp');
         container.innerHTML = ""; 
         const now = new Date();
-        for (let i = 0; i < 4; i++) {
+        // ★ 5ヶ月分描画するように変更（4から5へ）
+        for (let i = 0; i < 5; i++) {
             const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
             renderCalendar(d.getFullYear(), d.getMonth() + 1, container);
         }
@@ -471,10 +489,9 @@
         .then(() => console.log("Saved to GAS")).catch(err => console.error("Save Error:", err));
     }
 
-    // ★ カレンダー連携機能のスクリプト
     function openSettings() {
         document.getElementById('settingsOverlay').style.display = 'block';
-        document.getElementById('icalUrlContainer').style.display = 'none'; // 初期化
+        document.getElementById('icalUrlContainer').style.display = 'none';
     }
 
     function closeSettings() {
@@ -482,11 +499,8 @@
     }
 
     function generateIcalUrl() {
-        // ラジオボタンの選択状態を取得
         const mode = document.querySelector('input[name="sync_mode"]:checked').value;
-        // iCal用のURLを生成
         const url = GAS_URL + "?ical=" + CURRENT_USER_ID + "&mode=" + mode;
-        
         document.getElementById('icalUrlDisplay').value = url;
         document.getElementById('icalUrlContainer').style.display = 'block';
     }
