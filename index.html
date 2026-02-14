@@ -25,8 +25,13 @@
         .store-tab.active-annee { color: var(--annee-g1); border-bottom-color: var(--annee-g1); }
         .store-tab.active-yoki { color: var(--yoki-g1); border-bottom-color: var(--yoki-g1); }
 
-        #calendarApp, #sharedCalendarApp { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
-        .calendar-section, .shared-section { flex: 0 0 100%; width: 100%; background: #fff; scroll-snap-align: start; box-sizing: border-box; }
+        /* ★ 個人カレンダーは横スクロールのまま */
+        #calendarApp { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+        .calendar-section { flex: 0 0 100%; width: 100%; background: #fff; scroll-snap-align: start; box-sizing: border-box; }
+        
+        /* ★ 共有カレンダーは縦並び（縦スクロール）に変更 */
+        #sharedCalendarApp { display: block; }
+        .shared-section { width: 100%; background: #fff; box-sizing: border-box; margin-bottom: 20px; }
         
         .month-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; border-bottom: 1px solid #eee; }
         .month-title { font-weight: bold; color: #666; font-size: 1.1rem; }
@@ -49,7 +54,8 @@
 
         .shift-badge { display: block; margin-top: 2px; padding: 4px 2px; border-radius: 4px; color: #fff; font-size: 0.65rem; font-weight: bold; line-height: 1.2; text-align: center; word-break: break-word; }
 
-        .table-wrap { overflow-x: auto; max-height: calc(100vh - 220px); }
+        /* ★ 縦並びにあわせてテーブルを全展開するように修正 */
+        .table-wrap { overflow-x: auto; }
         .shared-table { border-collapse: collapse; width: 100%; min-width: 400px; font-size: 0.8rem; }
         .shared-table th, .shared-table td { border: 1px solid #eee; text-align: center; padding: 4px 2px; vertical-align: middle; }
         .shared-table th { background: #f4f4f4; position: sticky; top: 0; z-index: 10; color: #555; }
@@ -104,7 +110,7 @@
     </div>
     <div class="month-nav">2026</div>
     <div class="header-icons">
-        <div class="icon-btn" onclick="fetchDataFromGas()">🔄</div>
+        <div class="icon-btn" onclick="fetchDataFromGas(true)">🔄</div>
         <div class="icon-btn" onclick="openSettings()">⚙️</div>
     </div>
 </header>
@@ -205,15 +211,24 @@
 
     let currentStore = localStorage.getItem('shift_app_store') || 'annee';
     let currentView = 'personal';
-    let globalShiftData = [];
-    let globalUsersData = [];
+    
+    // ★ 待ち時間ゼロの魔法：スマホに保存されている前回のデータを一瞬で読み込む！
+    let globalShiftData = JSON.parse(localStorage.getItem('cached_shifts')) || [];
+    let globalUsersData = JSON.parse(localStorage.getItem('cached_users')) || [];
+    
     let activeDayElement = null;
     let activeDateString = "";
-    
     let globalHolidays = {};
 
     window.onload = function() {
         fetchHolidays();
+        
+        // ★ キャッシュデータがあれば、待たせずにすぐ画面を描画する！
+        if(globalShiftData.length > 0 && globalUsersData.length > 0) {
+            applyPermissions();
+            applyDataToPersonalCalendar();
+        }
+        
         renderAllPersonalCalendars();
         initializeLiff();
     };
@@ -230,7 +245,9 @@
     }
 
     function initializeLiff() {
-        document.getElementById('loading').style.display = 'block';
+        // ★ キャッシュがない初回のみ「読込中...」を出す
+        if(globalShiftData.length === 0) document.getElementById('loading').style.display = 'block';
+        
         liff.init({ liffId: LIFF_ID })
             .then(() => {
                 if (liff.isLoggedIn()) { return liff.getProfile(); } 
@@ -261,6 +278,7 @@
         return id;
     }
 
+    // LINEから戻ってきた時も、裏側でこっそり最新を取得する
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === 'visible' && CURRENT_USER_ID !== "") {
             fetchDataFromGas(); 
@@ -306,9 +324,10 @@
         if (currentView === 'shared') renderSharedCalendars();
     }
 
-    function fetchDataFromGas() {
+    // ★ 裏側でデータを取得する関数（forceUpdateがtrueの時は強制的にロード画面を出す）
+    function fetchDataFromGas(forceUpdate = false) {
         const loading = document.getElementById('loading');
-        if(globalShiftData.length === 0) loading.style.display = 'block'; 
+        if(globalShiftData.length === 0 || forceUpdate) loading.style.display = 'block'; 
 
         fetch(GAS_URL)
             .then(response => response.json())
@@ -319,6 +338,11 @@
                     if (item.date && item.date.includes('T')) item.date = item.date.split('T')[0];
                     return item;
                 });
+                
+                // ★ 取得した最新データをスマホに記憶（キャッシュ）させる！
+                localStorage.setItem('cached_shifts', JSON.stringify(globalShiftData));
+                localStorage.setItem('cached_users', JSON.stringify(globalUsersData));
+                
                 applyPermissions(); 
                 applyDataToPersonalCalendar();
                 if (currentView === 'shared') renderSharedCalendars();
@@ -561,34 +585,31 @@
         }
     }
 
-    // ★ 順番待ち（キュー）システムの変数
     let saveQueue = [];
     let isSaving = false;
 
-    // ★ データを一旦列に並ばせるように変更
     function saveDataToGas(date, label, color, store) {
         const data = { user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: date, shift_label: label, color: color, store: store };
-        saveQueue.push(data); // 列の最後尾に並ばせる
-        processQueue(); // 処理を開始
+        saveQueue.push(data);
+        processQueue(); 
     }
 
-    // ★ 順番に送信処理を行う関数
     function processQueue() {
-        if (isSaving || saveQueue.length === 0) return; // 処理中、または列が空なら何もしない
+        if (isSaving || saveQueue.length === 0) return; 
         
-        isSaving = true; // 処理中フラグを立てる
-        const data = saveQueue.shift(); // 列の先頭のデータを取り出す
+        isSaving = true; 
+        const data = saveQueue.shift(); 
         
         fetch(GAS_URL, { method: 'POST', body: JSON.stringify(data), mode: 'no-cors', headers: { 'Content-Type': 'text/plain' } })
         .then(() => {
             console.log("Saved to GAS");
-            isSaving = false; // 処理完了
-            processQueue(); // 次の処理へ
+            isSaving = false; 
+            processQueue(); 
         })
         .catch(err => {
             console.error("Save Error:", err);
             isSaving = false; 
-            processQueue(); // エラーが起きても列を止めずに次へ
+            processQueue(); 
         });
     }
 
