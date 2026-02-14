@@ -37,7 +37,9 @@
         .day:active, .day.active-focus { background: #ffebeb; }
         .day:nth-child(7n) { border-right: none; }
         .day.sun { color: #ff5a5f; } .day.sat { color: #007aff; }
-        .shift-badge { display: block; margin-top: 2px; padding: 4px 2px; border-radius: 4px; color: #fff; font-size: 0.65rem; font-weight: bold; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+        /* ★ 2段改行に対応するため、white-spaceの制限を解除し、line-heightを調整 */
+        .shift-badge { display: block; margin-top: 2px; padding: 4px 2px; border-radius: 4px; color: #fff; font-size: 0.65rem; font-weight: bold; line-height: 1.2; text-align: center; word-break: break-word; }
 
         .table-wrap { overflow-x: auto; max-height: calc(100vh - 220px); }
         .shared-table { border-collapse: collapse; width: 100%; min-width: 400px; font-size: 0.8rem; }
@@ -89,8 +91,12 @@
 <body>
 
 <header>
-    <div style="color:var(--main-red); font-weight:bold;">MENU</div>
-    <div class="month-nav">2026 Shift</div>
+    <div style="font-weight:bold;">
+        <img src="logo.png" alt="Logo" style="height: 28px; object-fit: contain; vertical-align: middle;">
+    </div>
+    
+    <div class="month-nav">2026</div>
+    
     <div class="header-icons">
         <div class="icon-btn" onclick="fetchDataFromGas()">🔄</div>
         <div class="icon-btn" onclick="openSettings()">⚙️</div>
@@ -185,11 +191,10 @@
 </div>
 
 <script>
-    // ★ 教えてもらったLIFF IDと、GASのURL
     const LIFF_ID = "2009130838-xQhedkHz";
     const GAS_URL = "https://script.google.com/macros/s/AKfycbz3Cnb2C_o8xjb9I_I_0jfgNXMhmo_TzcLh76MQ8FqYg9lYRx3VdEo4OdNVxpJO2fYl/exec";
 
-    let CURRENT_USER_ID = ""; // LIFFから自動で取得します！
+    let CURRENT_USER_ID = "";
     let currentUserObj = { id: "", name: "あなた", stores: ['annee', 'yoki.'], is_boss: true, is_core: true };
 
     let currentStore = localStorage.getItem('shift_app_store') || 'annee';
@@ -201,33 +206,25 @@
 
     window.onload = function() {
         renderAllPersonalCalendars();
-        initializeLiff(); // ★ ここでLIFFを起動して本人のLINE IDを取得！
+        initializeLiff();
     };
 
-    // ★ LIFF（LINE連携）の初期化
     function initializeLiff() {
         document.getElementById('loading').style.display = 'block';
-        
         liff.init({ liffId: LIFF_ID })
             .then(() => {
-                if (liff.isLoggedIn()) {
-                    return liff.getProfile(); // ログイン済みならプロフィール取得
-                } else {
-                    return null; // PCなどで開いた場合はnull
-                }
+                if (liff.isLoggedIn()) { return liff.getProfile(); } 
+                else { return null; }
             })
             .then(profile => {
                 if (profile) {
-                    // LINEで開いた場合：本物のLINE IDをセット！
                     CURRENT_USER_ID = profile.userId;
                     currentUserObj.id = profile.userId;
                     currentUserObj.name = profile.displayName;
                 } else {
-                    // ブラウザで開いた場合：仮のIDでテスト
                     CURRENT_USER_ID = getFallbackUserId();
                     currentUserObj.id = CURRENT_USER_ID;
                 }
-                // IDが分かってから、スプシの最新データを取得しにいく
                 fetchDataFromGas();
             })
             .catch(err => {
@@ -238,7 +235,6 @@
             });
     }
 
-    // （ブラウザテスト用の仮ID発行システム）
     function getFallbackUserId() {
         let id = localStorage.getItem('shift_app_user_id');
         if (!id) { id = 'user_' + Math.random().toString(36).substr(2, 9); localStorage.setItem('shift_app_user_id', id); }
@@ -253,9 +249,7 @@
 
     function applyPermissions() {
         const found = globalUsersData.find(u => u.id === CURRENT_USER_ID);
-        if (found) {
-            currentUserObj = found; // マスタに登録されていればその権限を適用！
-        }
+        if (found) currentUserObj = found;
         
         const isSpecial = currentUserObj.is_boss || currentUserObj.is_core;
         const canSeeAnnee = isSpecial || currentUserObj.stores.includes('annee');
@@ -331,7 +325,11 @@
         myShifts.forEach(shift => {
             const targetDiv = document.querySelector(`.day[data-date="${shift.date}"] .shift-area`);
             if (targetDiv) {
-                targetDiv.innerHTML = `<span class="shift-badge" style="background:${shift.color}">${shift.shift_label}</span>`;
+                // ★ 画面表示の時だけ、店舗名と数字の間で改行タグを入れる処理を追加
+                let displayLabel = shift.shift_label;
+                displayLabel = displayLabel.replace(/^(annee|yoki\.)(\d{4})$/, "$1<br>$2");
+                
+                targetDiv.innerHTML = `<span class="shift-badge" style="background:${shift.color}">${displayLabel}</span>`;
             }
             const monthKey = shift.date.substring(0, 7);
             const hours = Number(shift.work_hours) || calcShiftData(shift.shift_label);
@@ -407,11 +405,8 @@
 
             let maxCount = Math.max(...hourlyCounts);
             let rowClass = "";
-            if (maxCount >= 5) {
-                rowClass = "row-over"; 
-            } else if (maxCount <= 3) {
-                rowClass = "row-short"; 
-            }
+            if (maxCount >= 5) { rowClass = "row-over"; } 
+            else if (maxCount <= 3) { rowClass = "row-short"; }
 
             let dateClass = "date-col" + (dayOfWeek === 0 ? " sun" : "") + (dayOfWeek === 6 ? " sat" : "");
             tr.className = rowClass;
