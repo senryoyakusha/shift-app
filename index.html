@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>シフト管理</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
         :root { 
             --main-red: #ff5a5f; --bg-gray: #f8f8f8; 
@@ -184,15 +185,12 @@
 </div>
 
 <script>
+    // ★ 教えてもらったLIFF IDと、GASのURL
+    const LIFF_ID = "2009130838-xQhedkHz";
     const GAS_URL = "https://script.google.com/macros/s/AKfycbz3Cnb2C_o8xjb9I_I_0jfgNXMhmo_TzcLh76MQ8FqYg9lYRx3VdEo4OdNVxpJO2fYl/exec";
 
-    function getUserId() {
-        let id = localStorage.getItem('shift_app_user_id');
-        if (!id) { id = 'user_' + Math.random().toString(36).substr(2, 9); localStorage.setItem('shift_app_user_id', id); }
-        return id;
-    }
-    const CURRENT_USER_ID = getUserId();
-    let currentUserObj = { id: CURRENT_USER_ID, name: "あなた", stores: ['annee', 'yoki.'], is_boss: true, is_core: true };
+    let CURRENT_USER_ID = ""; // LIFFから自動で取得します！
+    let currentUserObj = { id: "", name: "あなた", stores: ['annee', 'yoki.'], is_boss: true, is_core: true };
 
     let currentStore = localStorage.getItem('shift_app_store') || 'annee';
     let currentView = 'personal';
@@ -203,19 +201,62 @@
 
     window.onload = function() {
         renderAllPersonalCalendars();
-        fetchDataFromGas();
+        initializeLiff(); // ★ ここでLIFFを起動して本人のLINE IDを取得！
     };
 
-    // ★ 画面を開いた瞬間（LINEから戻ってきた時）の自動更新（押し忘れ防止）
+    // ★ LIFF（LINE連携）の初期化
+    function initializeLiff() {
+        document.getElementById('loading').style.display = 'block';
+        
+        liff.init({ liffId: LIFF_ID })
+            .then(() => {
+                if (liff.isLoggedIn()) {
+                    return liff.getProfile(); // ログイン済みならプロフィール取得
+                } else {
+                    return null; // PCなどで開いた場合はnull
+                }
+            })
+            .then(profile => {
+                if (profile) {
+                    // LINEで開いた場合：本物のLINE IDをセット！
+                    CURRENT_USER_ID = profile.userId;
+                    currentUserObj.id = profile.userId;
+                    currentUserObj.name = profile.displayName;
+                } else {
+                    // ブラウザで開いた場合：仮のIDでテスト
+                    CURRENT_USER_ID = getFallbackUserId();
+                    currentUserObj.id = CURRENT_USER_ID;
+                }
+                // IDが分かってから、スプシの最新データを取得しにいく
+                fetchDataFromGas();
+            })
+            .catch(err => {
+                console.error("LIFFエラー:", err);
+                CURRENT_USER_ID = getFallbackUserId();
+                currentUserObj.id = CURRENT_USER_ID;
+                fetchDataFromGas();
+            });
+    }
+
+    // （ブラウザテスト用の仮ID発行システム）
+    function getFallbackUserId() {
+        let id = localStorage.getItem('shift_app_user_id');
+        if (!id) { id = 'user_' + Math.random().toString(36).substr(2, 9); localStorage.setItem('shift_app_user_id', id); }
+        return id;
+    }
+
     document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === 'visible') {
-            fetchDataFromGas(); // 画面がアクティブになったら裏側で最新データを取得！
+        if (document.visibilityState === 'visible' && CURRENT_USER_ID !== "") {
+            fetchDataFromGas(); 
         }
     });
 
     function applyPermissions() {
         const found = globalUsersData.find(u => u.id === CURRENT_USER_ID);
-        if (found) currentUserObj = found;
+        if (found) {
+            currentUserObj = found; // マスタに登録されていればその権限を適用！
+        }
+        
         const isSpecial = currentUserObj.is_boss || currentUserObj.is_core;
         const canSeeAnnee = isSpecial || currentUserObj.stores.includes('annee');
         const canSeeYoki = isSpecial || currentUserObj.stores.includes('yoki.');
@@ -252,9 +293,8 @@
     }
 
     function fetchDataFromGas() {
-        // ※自動リロード時に画面が固まらないよう、ローディングは一瞬だけ出すか消しておく
         const loading = document.getElementById('loading');
-        if(globalShiftData.length === 0) loading.style.display = 'block'; // 初回のみ表示
+        if(globalShiftData.length === 0) loading.style.display = 'block'; 
 
         fetch(GAS_URL)
             .then(response => response.json())
