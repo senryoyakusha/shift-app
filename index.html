@@ -7,12 +7,8 @@
     <style>
         :root { 
             --main-red: #ff5a5f; --bg-gray: #f8f8f8; 
-            /* annee 暖色系 */
-            --annee-g1: #e76f51; /* 0919,0920,1019,1020 */
-            --annee-g2: #f4a261; /* 0916,0917,1621,1721 */
-            /* yoki. 寒色系 */
-            --yoki-g1: #1d3557;  /* 0919,0920,1019,1020 */
-            --yoki-g2: #457b9d;  /* 0916,0917,1621,1721 */
+            --annee-g1: #e76f51; --annee-g2: #f4a261; 
+            --yoki-g1: #1d3557;  --yoki-g2: #457b9d;  
             --common-color: #2a9d8f; 
         }
         body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; background: var(--bg-gray); color: #333; overflow-x: hidden; padding-bottom: 70px; }
@@ -24,7 +20,7 @@
         .icon-btn:active { transform: scale(0.8); }
 
         .store-tabs { display: flex; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 52px; z-index: 49; }
-        .store-tab { flex: 1; text-align: center; padding: 12px 0; font-weight: bold; color: #aaa; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.2s; }
+        .store-tab { flex: 1; text-align: center; padding: 12px 0; font-weight: bold; color: #aaa; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.2s; display: none; } /* 初期非表示 */
         .store-tab.active-annee { color: var(--annee-g1); border-bottom-color: var(--annee-g1); }
         .store-tab.active-yoki { color: var(--yoki-g1); border-bottom-color: var(--yoki-g1); }
 
@@ -50,11 +46,13 @@
         .shared-table th.date-col { z-index: 15; }
         .shared-table .sun { color: #ff5a5f; } .shared-table .sat { color: #007aff; }
         
-        /* 共有カレンダーアラート色 */
-        .row-short { background-color: #ebf5ff !important; } /* 不足(3以下) */
-        .row-over { background-color: #ffebeb !important; }  /* 過剰(4以上) */
+        .row-short { background-color: #ebf5ff !important; }
+        .row-over { background-color: #ffebeb !important; }
 
-        /* パレット（下部1/3固定） */
+        /* 合計行のスタイル */
+        .total-row { background-color: #fff9e6 !important; font-weight: bold; color: #d97706; }
+        .total-row .date-col { background-color: #fff9e6 !important; color: #d97706; }
+
         #paletteOverlay { display: none; position: fixed; bottom: 70px; left: 0; width: 100%; height: 38vh; background: #fff; z-index: 100; box-shadow: 0 -5px 15px rgba(0,0,0,0.1); border-radius: 15px 15px 0 0; }
         .palette-content { height: 100%; padding: 10px 15px 15px; box-sizing: border-box; overflow-y: auto; }
         .palette-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
@@ -73,7 +71,6 @@
         .nav-item.active { color: var(--main-red); }
         .nav-item span { display: block; font-size: 1.4rem; margin-bottom: 2px; }
 
-        /* パレットが開いている時のカレンダー余白 */
         body.palette-open { padding-bottom: calc(38vh + 70px); }
     </style>
 </head>
@@ -89,7 +86,7 @@
 </header>
 
 <div id="storeTabs" class="store-tabs" style="display: none;">
-    <div id="tab-annee" class="store-tab active-annee" onclick="switchStore('annee')">annee</div>
+    <div id="tab-annee" class="store-tab" onclick="switchStore('annee')">annee</div>
     <div id="tab-yoki" class="store-tab" onclick="switchStore('yoki.')">yoki.</div>
 </div>
 
@@ -110,30 +107,34 @@
             <button class="close-btn" onclick="closePalette()">×</button>
         </div>
         
-        <div class="palette-section-title">■ annee</div>
-        <div class="stamp-grid">
-            <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee0919', 'var(--annee-g1)', 'annee')">annee<br>0919</button>
-            <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee0920', 'var(--annee-g1)', 'annee')">annee<br>0920</button>
-            <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee1019', 'var(--annee-g1)', 'annee')">annee<br>1019</button>
-            <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee1020', 'var(--annee-g1)', 'annee')">annee<br>1020</button>
-            
-            <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee0916', 'var(--annee-g2)', 'annee')">annee<br>0916</button>
-            <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee0917', 'var(--annee-g2)', 'annee')">annee<br>0917</button>
-            <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee1621', 'var(--annee-g2)', 'annee')">annee<br>1621</button>
-            <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee1721', 'var(--annee-g2)', 'annee')">annee<br>1721</button>
+        <div id="palette-group-annee" style="display:none;">
+            <div class="palette-section-title">■ annee</div>
+            <div class="stamp-grid">
+                <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee0919', 'var(--annee-g1)', 'annee')">annee<br>0919</button>
+                <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee0920', 'var(--annee-g1)', 'annee')">annee<br>0920</button>
+                <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee1019', 'var(--annee-g1)', 'annee')">annee<br>1019</button>
+                <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee1020', 'var(--annee-g1)', 'annee')">annee<br>1020</button>
+                
+                <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee0916', 'var(--annee-g2)', 'annee')">annee<br>0916</button>
+                <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee0917', 'var(--annee-g2)', 'annee')">annee<br>0917</button>
+                <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee1621', 'var(--annee-g2)', 'annee')">annee<br>1621</button>
+                <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee1721', 'var(--annee-g2)', 'annee')">annee<br>1721</button>
+            </div>
         </div>
 
-        <div class="palette-section-title">■ yoki.</div>
-        <div class="stamp-grid">
-            <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.0919', 'var(--yoki-g1)', 'yoki.')">yoki.<br>0919</button>
-            <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.0920', 'var(--yoki-g1)', 'yoki.')">yoki.<br>0920</button>
-            <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.1019', 'var(--yoki-g1)', 'yoki.')">yoki.<br>1019</button>
-            <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.1020', 'var(--yoki-g1)', 'yoki.')">yoki.<br>1020</button>
-            
-            <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.0916', 'var(--yoki-g2)', 'yoki.')">yoki.<br>0916</button>
-            <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.0917', 'var(--yoki-g2)', 'yoki.')">yoki.<br>0917</button>
-            <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.1621', 'var(--yoki-g2)', 'yoki.')">yoki.<br>1621</button>
-            <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.1721', 'var(--yoki-g2)', 'yoki.')">yoki.<br>1721</button>
+        <div id="palette-group-yoki" style="display:none;">
+            <div class="palette-section-title">■ yoki.</div>
+            <div class="stamp-grid">
+                <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.0919', 'var(--yoki-g1)', 'yoki.')">yoki.<br>0919</button>
+                <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.0920', 'var(--yoki-g1)', 'yoki.')">yoki.<br>0920</button>
+                <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.1019', 'var(--yoki-g1)', 'yoki.')">yoki.<br>1019</button>
+                <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.1020', 'var(--yoki-g1)', 'yoki.')">yoki.<br>1020</button>
+                
+                <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.0916', 'var(--yoki-g2)', 'yoki.')">yoki.<br>0916</button>
+                <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.0917', 'var(--yoki-g2)', 'yoki.')">yoki.<br>0917</button>
+                <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.1621', 'var(--yoki-g2)', 'yoki.')">yoki.<br>1621</button>
+                <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.1721', 'var(--yoki-g2)', 'yoki.')">yoki.<br>1721</button>
+            </div>
         </div>
 
         <div class="palette-section-title">■ 共通</div>
@@ -156,6 +157,9 @@
     }
     const CURRENT_USER_ID = getUserId();
     
+    // 現在のユーザー情報を格納（見つかるまでは仮で全権限を持たせる）
+    let currentUserObj = { id: CURRENT_USER_ID, name: "あなた", stores: ['annee', 'yoki.'], is_boss: true, is_core: true };
+
     let currentStore = localStorage.getItem('shift_app_store') || 'annee';
     let currentView = 'personal';
     let globalShiftData = [];
@@ -168,14 +172,41 @@
         fetchDataFromGas();
     };
 
+    function applyPermissions() {
+        // マスタデータから自分の情報を探す
+        const found = globalUsersData.find(u => u.id === CURRENT_USER_ID);
+        if (found) currentUserObj = found;
+
+        // タブの表示/非表示（コアメンバー等はすべて表示、一般は所属のみ）
+        const isSpecial = currentUserObj.is_boss || currentUserObj.is_core;
+        const canSeeAnnee = isSpecial || currentUserObj.stores.includes('annee');
+        const canSeeYoki = isSpecial || currentUserObj.stores.includes('yoki.');
+        
+        document.getElementById('tab-annee').style.display = canSeeAnnee ? 'block' : 'none';
+        document.getElementById('tab-yoki').style.display = canSeeYoki ? 'block' : 'none';
+
+        // 記憶していた店舗が見られない店舗なら、見られる店舗に強制変更
+        if (currentStore === 'annee' && !canSeeAnnee && canSeeYoki) currentStore = 'yoki.';
+        if (currentStore === 'yoki.' && !canSeeYoki && canSeeAnnee) currentStore = 'annee';
+        
+        switchStore(currentStore);
+    }
+
     function switchView(viewName) {
         currentView = viewName;
         document.getElementById('personalView').style.display = (viewName === 'personal') ? 'block' : 'none';
         document.getElementById('sharedView').style.display = (viewName === 'shared') ? 'block' : 'none';
-        document.getElementById('storeTabs').style.display = (viewName === 'shared') ? 'flex' : 'none';
+        
+        // 共有画面の時だけ、権限のあるタブメニューを表示
+        if (viewName === 'shared' && (document.getElementById('tab-annee').style.display === 'block' || document.getElementById('tab-yoki').style.display === 'block')) {
+            document.getElementById('storeTabs').style.display = 'flex';
+        } else {
+            document.getElementById('storeTabs').style.display = 'none';
+        }
+        
         document.getElementById('navPersonal').className = (viewName === 'personal') ? 'nav-item active' : 'nav-item';
         document.getElementById('navShared').className = (viewName === 'shared') ? 'nav-item active' : 'nav-item';
-        closePalette(); // 画面切り替え時はパレットを閉じる
+        closePalette(); 
         if (viewName === 'shared') switchStore(currentStore);
     }
 
@@ -199,6 +230,7 @@
                     if (item.date && item.date.includes('T')) item.date = item.date.split('T')[0];
                     return item;
                 });
+                applyPermissions(); // ★権限情報を更新
                 applyDataToPersonalCalendar();
                 if (currentView === 'shared') renderSharedCalendars();
                 loading.style.display = 'none';
@@ -206,7 +238,6 @@
             .catch(err => { console.error(err); loading.style.display = 'none'; });
     }
 
-    // HTML側での時間計算関数
     function calcShiftData(label) {
         let match = label.match(/(\d{2})(\d{2})/);
         if (match) {
@@ -220,8 +251,6 @@
     function applyDataToPersonalCalendar() {
         document.querySelectorAll('.shift-area').forEach(el => el.innerHTML = '');
         const myShifts = globalShiftData.filter(item => item.user_id === CURRENT_USER_ID);
-        
-        // 月ごとの合計計算用
         const monthlyHours = {};
 
         myShifts.forEach(shift => {
@@ -229,13 +258,11 @@
             if (targetDiv) {
                 targetDiv.innerHTML = `<span class="shift-badge" style="background:${shift.color}">${shift.shift_label}</span>`;
             }
-            // 月の集計 (YYYY-MM)
             const monthKey = shift.date.substring(0, 7);
             const hours = Number(shift.work_hours) || calcShiftData(shift.shift_label);
             monthlyHours[monthKey] = (monthlyHours[monthKey] || 0) + hours;
         });
 
-        // 合計時間を月見出しに反映
         for (let key in monthlyHours) {
             const totalSpan = document.getElementById(`total-${key}`);
             if (totalSpan) totalSpan.innerText = `合計: ${monthlyHours[key]}時間`;
@@ -245,6 +272,8 @@
     function renderSharedCalendars() {
         const container = document.getElementById('sharedCalendarApp');
         container.innerHTML = ""; 
+        // 共有カレンダーに表示するユーザーは「この店舗に所属している人」のみ！
+        // 代表でも、店舗に所属していなければ表の中には登場しない。
         let targetUsers = globalUsersData.filter(u => u.stores && u.stores.includes(currentStore));
         if (targetUsers.length === 0) return;
 
@@ -272,6 +301,7 @@
         const tbody = document.createElement('tbody');
         const daysInMonth = new Date(year, month, 0).getDate();
         const weekChars = ["日","月","火","水","木","金","土"];
+        const monthPrefix = `${year}-${('0' + month).slice(-2)}`;
 
         for (let d = 1; d <= daysInMonth; d++) {
             const dateObj = new Date(year, month - 1, d);
@@ -288,7 +318,6 @@
                 let cellHtml = "<td></td>";
                 if (shift) {
                     cellHtml = `<td><span class="shift-badge" style="background:${shift.color}; max-width: 45px; margin:0 auto; font-size:0.6rem;">${shift.shift_label.replace('annee','').replace('yoki.','')}</span></td>`;
-                    // 出勤判定の加算 (HTML側でも簡易計算)
                     let score = Number(shift.attendance_score);
                     if (isNaN(score)) {
                         let h = calcShiftData(shift.shift_label);
@@ -299,16 +328,37 @@
                 rowHtml += cellHtml;
             });
 
-            // 背景色アラート判定
             let rowClass = "";
-            if (dailyScoreSum >= 4) rowClass = "row-over"; // 4以上＝赤
-            else if (dailyScoreSum <= 3) rowClass = "row-short"; // 3以下＝青
+            if (dailyScoreSum >= 4) rowClass = "row-over"; 
+            else if (dailyScoreSum <= 3) rowClass = "row-short"; 
 
             let dateClass = "date-col" + (dayOfWeek === 0 ? " sun" : "") + (dayOfWeek === 6 ? " sat" : "");
             tr.className = rowClass;
             tr.innerHTML = `<td class="${dateClass} ${rowClass}">${m}/${da} <span style="font-size:0.7em">(${weekChars[dayOfWeek]})</span></td>` + rowHtml;
             tbody.appendChild(tr);
         }
+        
+        // ★ 一番下に「合計時間」の行を追加！
+        const trTotal = document.createElement('tr');
+        trTotal.className = 'total-row';
+        let totalHtml = `<td class="date-col">合計</td>`;
+        
+        targetUsers.forEach(u => {
+            let userTotalHrs = 0;
+            globalShiftData.forEach(shift => {
+                // この月、この人、この店舗（または共通）の労働時間を加算
+                if (shift.user_id === u.id && (shift.store === currentStore || shift.store === 'common') && shift.date.startsWith(monthPrefix)) {
+                    let h = Number(shift.work_hours);
+                    if (isNaN(h)) h = calcShiftData(shift.shift_label);
+                    userTotalHrs += h;
+                }
+            });
+            totalHtml += `<td>${userTotalHrs}h</td>`;
+        });
+        
+        trTotal.innerHTML = totalHtml;
+        tbody.appendChild(trTotal);
+
         table.appendChild(tbody); tableWrap.appendChild(table); section.appendChild(tableWrap); container.appendChild(section);
     }
 
@@ -353,10 +403,14 @@
         activeDayElement = el; activeDateString = dateIso; 
         activeDayElement.classList.add('active-focus');
         document.getElementById('selectedDateDisplay').innerText = dateText;
-        document.getElementById('paletteOverlay').style.display = 'block';
-        document.body.classList.add('palette-open'); // カレンダーの下部に余白を作る
         
-        // 選択した日付が見えるように少し上にスクロール
+        // ★自分が所属している店舗のパレットだけを表示する！
+        document.getElementById('palette-group-annee').style.display = currentUserObj.stores.includes('annee') ? 'block' : 'none';
+        document.getElementById('palette-group-yoki').style.display = currentUserObj.stores.includes('yoki.') ? 'block' : 'none';
+
+        document.getElementById('paletteOverlay').style.display = 'block';
+        document.body.classList.add('palette-open'); 
+        
         setTimeout(() => {
             const rect = el.getBoundingClientRect();
             if(rect.bottom > window.innerHeight - (window.innerHeight * 0.38)) {
@@ -378,13 +432,12 @@
         if (label) {
             let h = calcShiftData(label);
             let s = (h >= 9) ? 1 : (h > 0 ? 0.5 : 0);
-            globalShiftData.push({ user_id: CURRENT_USER_ID, user_name: "テストユーザー", date: activeDateString, shift_label: label, color: color, store: store, work_hours: h, attendance_score: s });
+            globalShiftData.push({ user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: activeDateString, shift_label: label, color: color, store: store, work_hours: h, attendance_score: s });
         }
 
-        applyDataToPersonalCalendar(); // 月間合計などを再計算して即時反映
+        applyDataToPersonalCalendar(); 
         saveDataToGas(activeDateString, label, color, store);
 
-        // 自動スライド
         let nextDateObj = new Date(activeDateString);
         nextDateObj.setDate(nextDateObj.getDate() + 1);
         const nextIso = `${nextDateObj.getFullYear()}-${('0' + (nextDateObj.getMonth() + 1)).slice(-2)}-${('0' + nextDateObj.getDate()).slice(-2)}`;
@@ -401,7 +454,7 @@
     }
 
     function saveDataToGas(date, label, color, store) {
-        const data = { user_id: CURRENT_USER_ID, user_name: "テストユーザー", date: date, shift_label: label, color: color, store: store };
+        const data = { user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: date, shift_label: label, color: color, store: store };
         fetch(GAS_URL, { method: 'POST', body: JSON.stringify(data), mode: 'no-cors', headers: { 'Content-Type': 'text/plain' } })
         .then(() => console.log("Saved to GAS")).catch(err => console.error("Save Error:", err));
     }
