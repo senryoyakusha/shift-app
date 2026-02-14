@@ -20,7 +20,7 @@
         .icon-btn:active { transform: scale(0.8); }
 
         .store-tabs { display: flex; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 52px; z-index: 49; }
-        .store-tab { flex: 1; text-align: center; padding: 12px 0; font-weight: bold; color: #aaa; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.2s; display: none; } /* 初期非表示 */
+        .store-tab { flex: 1; text-align: center; padding: 12px 0; font-weight: bold; color: #aaa; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.2s; display: none; }
         .store-tab.active-annee { color: var(--annee-g1); border-bottom-color: var(--annee-g1); }
         .store-tab.active-yoki { color: var(--yoki-g1); border-bottom-color: var(--yoki-g1); }
 
@@ -45,11 +45,8 @@
         .shared-table .date-col { width: 45px; background: #fafafa; font-weight: bold; position: sticky; left: 0; z-index: 5; }
         .shared-table th.date-col { z-index: 15; }
         .shared-table .sun { color: #ff5a5f; } .shared-table .sat { color: #007aff; }
-        
         .row-short { background-color: #ebf5ff !important; }
         .row-over { background-color: #ffebeb !important; }
-
-        /* 合計行のスタイル */
         .total-row { background-color: #fff9e6 !important; font-weight: bold; color: #d97706; }
         .total-row .date-col { background-color: #fff9e6 !important; color: #d97706; }
 
@@ -70,8 +67,23 @@
         .nav-item { flex: 1; text-align: center; padding: 10px 0; color: #999; font-size: 0.75rem; font-weight: bold; cursor: pointer; }
         .nav-item.active { color: var(--main-red); }
         .nav-item span { display: block; font-size: 1.4rem; margin-bottom: 2px; }
-
         body.palette-open { padding-bottom: calc(38vh + 70px); }
+
+        /* ★ カレンダー連携設定のモーダルデザイン */
+        #settingsOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 300; }
+        .settings-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; width: 90%; max-width: 400px; border-radius: 15px; padding: 25px 20px; box-sizing: border-box; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        .settings-header { font-weight: bold; font-size: 1.2rem; color: #333; margin-bottom: 10px; text-align: center; }
+        .settings-desc { font-size: 0.8rem; color: #666; margin-bottom: 20px; line-height: 1.5; }
+        .settings-radio { margin-bottom: 20px; font-size: 0.9rem; color: #444; }
+        .settings-radio label { display: flex; align-items: center; margin-bottom: 12px; cursor: pointer; }
+        .settings-radio input { margin-right: 8px; transform: scale(1.2); }
+        .btn-generate { display: block; width: 100%; padding: 12px; background: var(--main-red); color: #fff; text-align: center; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; }
+        .btn-generate:active { opacity: 0.8; }
+        
+        .url-box { margin-top: 20px; display: none; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #eee; }
+        .url-input { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 5px; font-size: 0.75rem; background: #fff; margin-bottom: 10px; resize: none; word-break: break-all; }
+        .btn-copy { display: block; width: 100%; padding: 10px; background: #007aff; color: #fff; text-align: center; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .close-settings { position: absolute; top: 15px; right: 15px; font-size: 24px; color: #bbb; background: none; border: none; cursor: pointer; padding: 0 5px; }
     </style>
 </head>
 <body>
@@ -81,7 +93,7 @@
     <div class="month-nav">2026 Shift</div>
     <div class="header-icons">
         <div class="icon-btn" onclick="fetchDataFromGas()">🔄</div>
-        <div class="icon-btn">＋</div>
+        <div class="icon-btn" onclick="openSettings()">⚙️</div>
     </div>
 </header>
 
@@ -92,7 +104,6 @@
 
 <div id="personalView"><div id="calendarApp"></div></div>
 <div id="sharedView" style="display: none;"><div id="sharedCalendarApp"></div></div>
-
 <div id="loading">読込中...</div>
 
 <div class="bottom-nav">
@@ -114,7 +125,6 @@
                 <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee0920', 'var(--annee-g1)', 'annee')">annee<br>0920</button>
                 <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee1019', 'var(--annee-g1)', 'annee')">annee<br>1019</button>
                 <button class="stamp" style="background:var(--annee-g1)" onclick="applyShift('annee1020', 'var(--annee-g1)', 'annee')">annee<br>1020</button>
-                
                 <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee0916', 'var(--annee-g2)', 'annee')">annee<br>0916</button>
                 <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee0917', 'var(--annee-g2)', 'annee')">annee<br>0917</button>
                 <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee1621', 'var(--annee-g2)', 'annee')">annee<br>1621</button>
@@ -129,7 +139,6 @@
                 <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.0920', 'var(--yoki-g1)', 'yoki.')">yoki.<br>0920</button>
                 <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.1019', 'var(--yoki-g1)', 'yoki.')">yoki.<br>1019</button>
                 <button class="stamp" style="background:var(--yoki-g1)" onclick="applyShift('yoki.1020', 'var(--yoki-g1)', 'yoki.')">yoki.<br>1020</button>
-                
                 <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.0916', 'var(--yoki-g2)', 'yoki.')">yoki.<br>0916</button>
                 <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.0917', 'var(--yoki-g2)', 'yoki.')">yoki.<br>0917</button>
                 <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.1621', 'var(--yoki-g2)', 'yoki.')">yoki.<br>1621</button>
@@ -147,6 +156,31 @@
     </div>
 </div>
 
+<div id="settingsOverlay">
+    <div class="settings-content">
+        <button class="close-settings" onclick="closeSettings()">×</button>
+        <div class="settings-header">📅 カレンダー連携</div>
+        <div class="settings-desc">
+            アプリのシフト情報を、GoogleカレンダーやTimeTree、iPhone標準カレンダーに自動で同期できます。
+        </div>
+        
+        <div class="settings-radio">
+            <label><input type="radio" name="sync_mode" value="all" checked> すべてのシフトを連携する</label>
+            <label><input type="radio" name="sync_mode" value="common"> 休み・作業日など共通のみ連携</label>
+        </div>
+        
+        <button class="btn-generate" onclick="generateIcalUrl()">同期URLを発行する</button>
+        
+        <div id="icalUrlContainer" class="url-box">
+            <div style="font-size:0.75rem; color:#666; margin-bottom:8px;">
+                以下のURLをコピーして、外部カレンダーアプリの「URLで照会/追加」画面に貼り付けてください。
+            </div>
+            <textarea id="icalUrlDisplay" class="url-input" rows="3" readonly></textarea>
+            <button class="btn-copy" onclick="copyIcalUrl()">URLをコピー</button>
+        </div>
+    </div>
+</div>
+
 <script>
     const GAS_URL = "https://script.google.com/macros/s/AKfycbz3Cnb2C_o8xjb9I_I_0jfgNXMhmo_TzcLh76MQ8FqYg9lYRx3VdEo4OdNVxpJO2fYl/exec";
 
@@ -156,8 +190,6 @@
         return id;
     }
     const CURRENT_USER_ID = getUserId();
-    
-    // 現在のユーザー情報を格納（見つかるまでは仮で全権限を持たせる）
     let currentUserObj = { id: CURRENT_USER_ID, name: "あなた", stores: ['annee', 'yoki.'], is_boss: true, is_core: true };
 
     let currentStore = localStorage.getItem('shift_app_store') || 'annee';
@@ -173,11 +205,8 @@
     };
 
     function applyPermissions() {
-        // マスタデータから自分の情報を探す
         const found = globalUsersData.find(u => u.id === CURRENT_USER_ID);
         if (found) currentUserObj = found;
-
-        // タブの表示/非表示（コアメンバー等はすべて表示、一般は所属のみ）
         const isSpecial = currentUserObj.is_boss || currentUserObj.is_core;
         const canSeeAnnee = isSpecial || currentUserObj.stores.includes('annee');
         const canSeeYoki = isSpecial || currentUserObj.stores.includes('yoki.');
@@ -185,10 +214,8 @@
         document.getElementById('tab-annee').style.display = canSeeAnnee ? 'block' : 'none';
         document.getElementById('tab-yoki').style.display = canSeeYoki ? 'block' : 'none';
 
-        // 記憶していた店舗が見られない店舗なら、見られる店舗に強制変更
         if (currentStore === 'annee' && !canSeeAnnee && canSeeYoki) currentStore = 'yoki.';
         if (currentStore === 'yoki.' && !canSeeYoki && canSeeAnnee) currentStore = 'annee';
-        
         switchStore(currentStore);
     }
 
@@ -196,14 +223,11 @@
         currentView = viewName;
         document.getElementById('personalView').style.display = (viewName === 'personal') ? 'block' : 'none';
         document.getElementById('sharedView').style.display = (viewName === 'shared') ? 'block' : 'none';
-        
-        // 共有画面の時だけ、権限のあるタブメニューを表示
         if (viewName === 'shared' && (document.getElementById('tab-annee').style.display === 'block' || document.getElementById('tab-yoki').style.display === 'block')) {
             document.getElementById('storeTabs').style.display = 'flex';
         } else {
             document.getElementById('storeTabs').style.display = 'none';
         }
-        
         document.getElementById('navPersonal').className = (viewName === 'personal') ? 'nav-item active' : 'nav-item';
         document.getElementById('navShared').className = (viewName === 'shared') ? 'nav-item active' : 'nav-item';
         closePalette(); 
@@ -230,7 +254,7 @@
                     if (item.date && item.date.includes('T')) item.date = item.date.split('T')[0];
                     return item;
                 });
-                applyPermissions(); // ★権限情報を更新
+                applyPermissions(); 
                 applyDataToPersonalCalendar();
                 if (currentView === 'shared') renderSharedCalendars();
                 loading.style.display = 'none';
@@ -272,8 +296,6 @@
     function renderSharedCalendars() {
         const container = document.getElementById('sharedCalendarApp');
         container.innerHTML = ""; 
-        // 共有カレンダーに表示するユーザーは「この店舗に所属している人」のみ！
-        // 代表でも、店舗に所属していなければ表の中には登場しない。
         let targetUsers = globalUsersData.filter(u => u.stores && u.stores.includes(currentStore));
         if (targetUsers.length === 0) return;
 
@@ -286,8 +308,7 @@
 
     function createSharedTable(year, month, targetUsers, container) {
         const section = document.createElement('div'); section.className = 'shared-section';
-        const title = document.createElement('div');
-        title.className = 'month-header';
+        const title = document.createElement('div'); title.className = 'month-header';
         title.innerHTML = `<span class="month-title">${year} / ${month}</span>`;
         section.appendChild(title);
         
@@ -310,8 +331,7 @@
             const isoDate = `${y}-${m}-${da}`;
             const tr = document.createElement('tr');
             
-            let rowHtml = "";
-            let dailyScoreSum = 0;
+            let rowHtml = ""; let dailyScoreSum = 0;
 
             targetUsers.forEach(u => {
                 const shift = globalShiftData.find(item => item.user_id === u.id && item.date === isoDate && (item.store === currentStore || item.store === 'common'));
@@ -338,15 +358,11 @@
             tbody.appendChild(tr);
         }
         
-        // ★ 一番下に「合計時間」の行を追加！
-        const trTotal = document.createElement('tr');
-        trTotal.className = 'total-row';
+        const trTotal = document.createElement('tr'); trTotal.className = 'total-row';
         let totalHtml = `<td class="date-col">合計</td>`;
-        
         targetUsers.forEach(u => {
             let userTotalHrs = 0;
             globalShiftData.forEach(shift => {
-                // この月、この人、この店舗（または共通）の労働時間を加算
                 if (shift.user_id === u.id && (shift.store === currentStore || shift.store === 'common') && shift.date.startsWith(monthPrefix)) {
                     let h = Number(shift.work_hours);
                     if (isNaN(h)) h = calcShiftData(shift.shift_label);
@@ -356,9 +372,7 @@
             totalHtml += `<td>${userTotalHrs}h</td>`;
         });
         
-        trTotal.innerHTML = totalHtml;
-        tbody.appendChild(trTotal);
-
+        trTotal.innerHTML = totalHtml; tbody.appendChild(trTotal);
         table.appendChild(tbody); tableWrap.appendChild(table); section.appendChild(tableWrap); container.appendChild(section);
     }
 
@@ -376,8 +390,7 @@
         const section = document.createElement('div'); section.className = 'calendar-section';
         const monthKey = `${year}-${('0' + month).slice(-2)}`;
         
-        const title = document.createElement('div');
-        title.className = 'month-header';
+        const title = document.createElement('div'); title.className = 'month-header';
         title.innerHTML = `<span class="month-title">${year} / ${month}</span><span class="month-total" id="total-${monthKey}">合計: 0時間</span>`;
         section.appendChild(title);
         
@@ -404,7 +417,6 @@
         activeDayElement.classList.add('active-focus');
         document.getElementById('selectedDateDisplay').innerText = dateText;
         
-        // ★自分が所属している店舗のパレットだけを表示する！
         document.getElementById('palette-group-annee').style.display = currentUserObj.stores.includes('annee') ? 'block' : 'none';
         document.getElementById('palette-group-yoki').style.display = currentUserObj.stores.includes('yoki.') ? 'block' : 'none';
 
@@ -457,6 +469,33 @@
         const data = { user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: date, shift_label: label, color: color, store: store };
         fetch(GAS_URL, { method: 'POST', body: JSON.stringify(data), mode: 'no-cors', headers: { 'Content-Type': 'text/plain' } })
         .then(() => console.log("Saved to GAS")).catch(err => console.error("Save Error:", err));
+    }
+
+    // ★ カレンダー連携機能のスクリプト
+    function openSettings() {
+        document.getElementById('settingsOverlay').style.display = 'block';
+        document.getElementById('icalUrlContainer').style.display = 'none'; // 初期化
+    }
+
+    function closeSettings() {
+        document.getElementById('settingsOverlay').style.display = 'none';
+    }
+
+    function generateIcalUrl() {
+        // ラジオボタンの選択状態を取得
+        const mode = document.querySelector('input[name="sync_mode"]:checked').value;
+        // iCal用のURLを生成
+        const url = GAS_URL + "?ical=" + CURRENT_USER_ID + "&mode=" + mode;
+        
+        document.getElementById('icalUrlDisplay').value = url;
+        document.getElementById('icalUrlContainer').style.display = 'block';
+    }
+
+    function copyIcalUrl() {
+        const copyText = document.getElementById("icalUrlDisplay");
+        copyText.select();
+        document.execCommand("copy");
+        alert("コピーしました！\nTimeTreeやGoogleカレンダーの「URLで照会/追加」から登録してください。");
     }
 </script>
 </body>
