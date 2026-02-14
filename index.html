@@ -8,7 +8,7 @@
         :root { --main-red: #ff5a5f; --bg-gray: #f8f8f8; --annee-color: #ff7f50; --yoki-color: #87CEFA; --common-color: #2a9d8f; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif; margin: 0; background: var(--bg-gray); color: #333; overflow-x: hidden; padding-bottom: 70px; }
         
-        /* ヘッダー */
+        /* ヘッダー（右上に更新ボタン追加） */
         header { 
             display: flex; justify-content: space-between; align-items: center; 
             padding: 10px 15px; background: #fff; border-bottom: 1px solid #ddd; 
@@ -16,30 +16,47 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
         .month-nav { color: var(--main-red); font-weight: bold; font-size: 1.2rem; }
+        .header-icons { display: flex; gap: 15px; font-size: 1.4rem; color: var(--main-red); align-items: center; }
+        .icon-btn { cursor: pointer; transition: transform 0.1s; }
+        .icon-btn:active { transform: scale(0.8); }
 
-        /* 店舗切り替えタブ（共有画面のみ表示） */
+        /* 店舗切り替えタブ */
         .store-tabs { display: flex; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 52px; z-index: 49; }
         .store-tab { flex: 1; text-align: center; padding: 12px 0; font-weight: bold; color: #aaa; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.2s; }
         .store-tab.active-annee { color: var(--annee-color); border-bottom-color: var(--annee-color); }
         .store-tab.active-yoki { color: var(--yoki-color); border-bottom-color: var(--yoki-color); }
 
+        /* 横スクロール対応のコンテナ */
+        #calendarApp, #sharedCalendarApp {
+            display: flex;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory; /* ピタッと止まる */
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+        }
+
         /* カレンダー共通 */
-        .calendar-section { background: #fff; margin-bottom: 20px; }
+        .calendar-section, .shared-section { 
+            flex: 0 0 100%; /* 横幅100%にして横並びに */
+            width: 100%;
+            background: #fff; 
+            scroll-snap-align: start;
+            box-sizing: border-box;
+        }
+
         .grid { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid #eee; }
         .day { 
             min-height: 70px; border-right: 1px solid #eee; border-top: 1px solid #eee; 
             padding: 4px; position: relative; font-size: 0.75rem; text-align: center; 
             cursor: pointer; transition: background 0.1s;
         }
-        .day:active { background: #f0f0f0; }
+        .day:active, .day.active-focus { background: #ffebeb; } /* 選択中の日をハイライト */
         .day:nth-child(7n) { border-right: none; }
         .day.sun { color: #ff5a5f; } .day.sat { color: #007aff; }
-        
-        /* シフトバッジ（1日に複数表示できるようにマージン調整） */
         .shift-badge { display: block; margin-top: 2px; padding: 4px 2px; border-radius: 6px; color: #fff; font-size: 0.7rem; font-weight: bold; line-height: 1.1; }
 
-        /* 共有カレンダー（マトリックス表） */
-        .shared-section { background: #fff; margin-bottom: 20px; overflow-x: auto; }
+        /* 共有カレンダー表 */
+        .table-wrap { overflow-x: auto; max-height: calc(100vh - 200px); }
         .shared-table { border-collapse: collapse; width: 100%; min-width: 400px; font-size: 0.8rem; }
         .shared-table th, .shared-table td { border: 1px solid #eee; text-align: center; padding: 6px 2px; vertical-align: middle; }
         .shared-table th { background: #f4f4f4; position: sticky; top: 0; z-index: 10; color: #555; }
@@ -49,32 +66,35 @@
 
         /* 入力パレット */
         #paletteOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 100; }
-        .palette-content { position: fixed; bottom: 0; left: 0; width: 100%; background: #fff; border-radius: 20px 20px 0 0; padding: 20px 15px 40px; box-sizing: border-box; transform: translateY(100%); transition: transform 0.3s; z-index: 101; max-height: 80vh; overflow-y: auto; }
+        .palette-content { position: fixed; bottom: 0; left: 0; width: 100%; background: #fff; border-radius: 20px 20px 0 0; padding: 20px 15px 40px; box-sizing: border-box; transform: translateY(100%); transition: transform 0.3s; z-index: 101; max-height: 85vh; overflow-y: auto; }
         .palette-content.show { transform: translateY(0); }
-        .palette-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; color: #666; font-weight: bold; font-size: 1.1rem; }
+        .palette-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; color: #666; font-weight: bold; font-size: 1.1rem; }
         
-        .palette-section-title { font-size: 0.85rem; font-weight: bold; margin: 15px 0 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+        .palette-section-title { font-size: 0.85rem; font-weight: bold; margin: 10px 0 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
         .stamp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-        .stamp { aspect-ratio: 1; border-radius: 8px; border: none; color: #fff; font-weight: bold; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .stamp { aspect-ratio: 1; border-radius: 8px; border: none; color: #fff; font-weight: bold; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.1s; }
+        .stamp:active { transform: scale(0.9); }
         .s-del { background: #fff; color: #333; border: 1px dashed #ccc; font-size: 0.7rem; }
-        .close-btn { font-size: 28px; color: #ccc; border: none; background: none; cursor: pointer; }
+        .close-btn { font-size: 28px; color: #ccc; border: none; background: none; cursor: pointer; padding: 0 10px; margin-right: -10px; }
         
-        /* ローディング表示 */
         #loading { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.7); color: #fff; padding: 10px 20px; border-radius: 5px; z-index: 200; display: none; }
 
         /* 下部ナビゲーション */
         .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; background: #fff; display: flex; border-top: 1px solid #ddd; z-index: 50; box-shadow: 0 -2px 5px rgba(0,0,0,0.05); }
-        .nav-item { flex: 1; text-align: center; padding: 15px 0; color: #999; font-size: 0.85rem; font-weight: bold; cursor: pointer; }
+        .nav-item { flex: 1; text-align: center; padding: 10px 0; color: #999; font-size: 0.75rem; font-weight: bold; cursor: pointer; }
         .nav-item.active { color: var(--main-red); }
-        .nav-item span { display: block; font-size: 1.2rem; margin-bottom: 2px; }
+        .nav-item span { display: block; font-size: 1.4rem; margin-bottom: 2px; }
     </style>
 </head>
 <body>
 
 <header>
-    <div style="color:var(--main-red)">MENU</div>
+    <div style="color:var(--main-red); font-weight:bold;">MENU</div>
     <div class="month-nav">2026 Shift</div>
-    <div style="font-size:1.5rem; color:var(--main-red)">＋</div>
+    <div class="header-icons">
+        <div class="icon-btn" onclick="fetchDataFromGas()">🔄</div>
+        <div class="icon-btn">＋</div>
+    </div>
 </header>
 
 <div id="storeTabs" class="store-tabs" style="display: none;">
@@ -101,59 +121,49 @@
     </div>
 </div>
 
-<div id="paletteOverlay">
-    <div id="paletteContent" class="palette-content">
+<div id="paletteOverlay" onclick="closePalette(event)">
+    <div id="paletteContent" class="palette-content" onclick="event.stopPropagation()">
         <div class="palette-header">
-            <span id="selectedDateDisplay">日付を選択</span>
+            <span id="selectedDateDisplay" style="color:var(--main-red);">日付を選択</span>
             <button class="close-btn" onclick="closePalette()">×</button>
         </div>
         
-        <div class="palette-section-title" style="color: var(--annee-color);">■ annee シフト</div>
+        <div class="palette-section-title" style="color: var(--annee-color);">■ annee</div>
         <div class="stamp-grid">
             <button class="stamp" style="background:var(--annee-color)" onclick="applyShift('0920', '#ff7f50', 'annee')">09<br>20</button>
             <button class="stamp" style="background:var(--annee-color)" onclick="applyShift('1020', '#ff7f50', 'annee')">10<br>20</button>
-            <button class="stamp" style="background:var(--annee-color)" onclick="applyShift('休み', '#ff7f50', 'annee')">休み</button>
-            <button class="stamp s-del" onclick="applyShift('', '', 'annee')">annee<br>消去</button>
         </div>
 
-        <div class="palette-section-title" style="color: var(--yoki-color);">■ yoki. シフト</div>
+        <div class="palette-section-title" style="color: var(--yoki-color);">■ yoki.</div>
         <div class="stamp-grid">
             <button class="stamp" style="background:var(--yoki-color)" onclick="applyShift('0920', '#87CEFA', 'yoki.')">09<br>20</button>
             <button class="stamp" style="background:var(--yoki-color)" onclick="applyShift('1020', '#87CEFA', 'yoki.')">10<br>20</button>
-            <button class="stamp" style="background:var(--yoki-color)" onclick="applyShift('休み', '#87CEFA', 'yoki.')">休み</button>
-            <button class="stamp s-del" onclick="applyShift('', '', 'yoki.')">yoki.<br>消去</button>
         </div>
 
         <div class="palette-section-title" style="color: var(--common-color);">■ 共通</div>
-        <div class="stamp-grid" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="stamp-grid">
+            <button class="stamp" style="background:#ff5e99" onclick="applyShift('休み', '#ff5e99', 'common')">休み</button>
             <button class="stamp" style="background:var(--common-color)" onclick="applyShift('作業日', '#2a9d8f', 'common')">作業日</button>
-            <button class="stamp s-del" onclick="applyShift('', '', 'common')">作業<br>消去</button>
+            <button class="stamp s-del" onclick="applyShift('', '', '')">消去</button>
         </div>
     </div>
 </div>
 
 <script>
+    // ★新しいGASのURLに書き換えてください！
     const GAS_URL = "https://script.google.com/macros/s/AKfycbz3Cnb2C_o8xjb9I_I_0jfgNXMhmo_TzcLh76MQ8FqYg9lYRx3VdEo4OdNVxpJO2fYl/exec";
 
-    // ユーザーIDの取得
     function getUserId() {
         let id = localStorage.getItem('shift_app_user_id');
-        if (!id) {
-            id = 'user_' + Math.random().toString(36).substr(2, 9);
-            localStorage.setItem('shift_app_user_id', id);
-        }
+        if (!id) { id = 'user_' + Math.random().toString(36).substr(2, 9); localStorage.setItem('shift_app_user_id', id); }
         return id;
     }
     const CURRENT_USER_ID = getUserId();
     
-    // 店舗の記憶を読み込み（デフォルトはannee）
     let currentStore = localStorage.getItem('shift_app_store') || 'annee';
     let currentView = 'personal';
-
-    // グローバルデータ
     let globalShiftData = [];
     let globalUsersData = [];
-
     let activeDayElement = null;
     let activeDateString = "";
 
@@ -162,7 +172,6 @@
         fetchDataFromGas();
     };
 
-    // --- 画面＆店舗 切り替え処理 ---
     function switchView(viewName) {
         currentView = viewName;
         document.getElementById('personalView').style.display = (viewName === 'personal') ? 'block' : 'none';
@@ -172,25 +181,17 @@
         document.getElementById('navPersonal').className = (viewName === 'personal') ? 'nav-item active' : 'nav-item';
         document.getElementById('navShared').className = (viewName === 'shared') ? 'nav-item active' : 'nav-item';
         
-        if (viewName === 'shared') {
-            switchStore(currentStore); // 現在の店舗で共有カレンダーを描画
-        }
+        if (viewName === 'shared') { switchStore(currentStore); }
     }
 
     function switchStore(storeName) {
         currentStore = storeName;
-        localStorage.setItem('shift_app_store', storeName); // 記憶する
-
-        // タブの見た目変更
+        localStorage.setItem('shift_app_store', storeName);
         document.getElementById('tab-annee').className = 'store-tab' + (storeName === 'annee' ? ' active-annee' : '');
         document.getElementById('tab-yoki').className = 'store-tab' + (storeName === 'yoki.' ? ' active-yoki' : '');
-
-        if (currentView === 'shared') {
-            renderSharedCalendars();
-        }
+        if (currentView === 'shared') { renderSharedCalendars(); }
     }
 
-    // --- データの取得 ---
     function fetchDataFromGas() {
         const loading = document.getElementById('loading');
         loading.style.display = 'block';
@@ -198,61 +199,39 @@
         fetch(GAS_URL)
             .then(response => response.json())
             .then(data => {
-                // GASの新しい形式に対応 { shifts: [], users: [] }
-                // ※万が一旧形式（配列）で返ってきた場合の安全対策含む
                 const shifts = Array.isArray(data) ? data : (data.shifts || []);
                 globalUsersData = data.users || [];
-
                 globalShiftData = shifts.map(item => {
-                    if (item.date && item.date.includes('T')) {
-                        item.date = item.date.split('T')[0];
-                    }
+                    if (item.date && item.date.includes('T')) item.date = item.date.split('T')[0];
                     return item;
                 });
-                
                 applyDataToPersonalCalendar();
+                if (currentView === 'shared') renderSharedCalendars();
                 loading.style.display = 'none';
             })
-            .catch(err => {
-                console.error("Load Error:", err);
-                loading.style.display = 'none';
-            });
+            .catch(err => { console.error("Load Error:", err); loading.style.display = 'none'; });
     }
 
-    // --- 個人カレンダーへのデータ反映 ---
     function applyDataToPersonalCalendar() {
         document.querySelectorAll('.shift-area').forEach(el => el.innerHTML = '');
-        
-        // 自分のシフトをすべて抽出（複数店舗の掛け持ち対応）
         const myShifts = globalShiftData.filter(item => item.user_id === CURRENT_USER_ID);
-        
         myShifts.forEach(shift => {
             const targetDiv = document.querySelector(`.day[data-date="${shift.date}"] .shift-area`);
             if (targetDiv) {
-                targetDiv.innerHTML += `<span class="shift-badge" style="background:${shift.color}">${shift.shift_label}</span>`;
+                targetDiv.innerHTML = `<span class="shift-badge" style="background:${shift.color}">${shift.shift_label}</span>`;
             }
         });
     }
 
-    // --- 共有カレンダー（表）の描画 ---
     function renderSharedCalendars() {
         const container = document.getElementById('sharedCalendarApp');
         container.innerHTML = ""; 
-
-        // 選択中の店舗に所属しているユーザーだけをマスタから抽出
         let targetUsers = globalUsersData.filter(u => u.stores && u.stores.includes(currentStore));
         
-        // （安全対策：もしマスタが空なら、シフト履歴からユーザーを仮生成）
         if (targetUsers.length === 0) {
             const tempUsers = {};
-            globalShiftData.forEach(item => {
-                if (item.store === currentStore) {
-                    tempUsers[item.user_id] = item.user_name;
-                }
-            });
+            globalShiftData.forEach(item => { if (item.store === currentStore) tempUsers[item.user_id] = item.user_name; });
             targetUsers = Object.keys(tempUsers).map(uid => ({ id: uid, name: tempUsers[uid] }));
-            
-            // それでも誰もいなければ「まだデータがありません」表示
             if (targetUsers.length === 0) {
                 container.innerHTML = `<div style="padding: 20px; text-align: center; color: #999;">${currentStore} のスタッフ情報がありません</div>`;
                 return;
@@ -267,24 +246,17 @@
     }
 
     function createSharedTable(year, month, targetUsers, container) {
-        const section = document.createElement('div');
-        section.className = 'shared-section';
-
+        const section = document.createElement('div'); section.className = 'shared-section';
         const title = document.createElement('div');
         title.style.padding = "10px"; title.style.fontWeight = "bold"; title.style.color = "#666"; title.style.borderBottom = "1px solid #eee";
-        title.innerText = `${year} / ${month}`;
-        section.appendChild(title);
-
-        const table = document.createElement('table');
-        table.className = 'shared-table';
-
-        // ヘッダー行
+        title.innerText = `${year} / ${month}`; section.appendChild(title);
+        
+        const tableWrap = document.createElement('div'); tableWrap.className = 'table-wrap';
+        const table = document.createElement('table'); table.className = 'shared-table';
+        
         let headerRow = `<tr><th class="date-col">日付</th>`;
-        targetUsers.forEach(u => {
-            headerRow += `<th>${u.name}</th>`;
-        });
-        headerRow += `</tr>`;
-        table.innerHTML = `<thead>${headerRow}</thead>`;
+        targetUsers.forEach(u => { headerRow += `<th>${u.name}</th>`; });
+        headerRow += `</tr>`; table.innerHTML = `<thead>${headerRow}</thead>`;
 
         const tbody = document.createElement('tbody');
         const daysInMonth = new Date(year, month, 0).getDate();
@@ -293,32 +265,23 @@
         for (let d = 1; d <= daysInMonth; d++) {
             const dateObj = new Date(year, month - 1, d);
             const dayOfWeek = dateObj.getDay();
-            const y = dateObj.getFullYear();
-            const m = ('0' + (dateObj.getMonth() + 1)).slice(-2);
-            const da = ('0' + dateObj.getDate()).slice(-2);
+            const y = dateObj.getFullYear(); const m = ('0' + (dateObj.getMonth() + 1)).slice(-2); const da = ('0' + dateObj.getDate()).slice(-2);
             const isoDate = `${y}-${m}-${da}`;
-
             const tr = document.createElement('tr');
             let dateClass = "date-col" + (dayOfWeek === 0 ? " sun" : "") + (dayOfWeek === 6 ? " sat" : "");
             tr.innerHTML = `<td class="${dateClass}">${m}/${da} <span style="font-size:0.7em">(${weekChars[dayOfWeek]})</span></td>`;
 
             targetUsers.forEach(u => {
-                // この人・この日・この店舗（または共通）のデータを検索
                 const shift = globalShiftData.find(item => item.user_id === u.id && item.date === isoDate && (item.store === currentStore || item.store === 'common'));
                 let cellHtml = "<td></td>";
-                if (shift) {
-                    cellHtml = `<td><span class="shift-badge" style="background:${shift.color}; margin:0 auto; max-width: 40px;">${shift.shift_label}</span></td>`;
-                }
+                if (shift) cellHtml = `<td><span class="shift-badge" style="background:${shift.color}; margin:0 auto; max-width: 40px;">${shift.shift_label}</span></td>`;
                 tr.innerHTML += cellHtml;
             });
             tbody.appendChild(tr);
         }
-        table.appendChild(tbody);
-        section.appendChild(table);
-        container.appendChild(section);
+        table.appendChild(tbody); tableWrap.appendChild(table); section.appendChild(tableWrap); container.appendChild(section);
     }
 
-    // --- カレンダー描画・パレット処理 ---
     function renderAllPersonalCalendars() {
         const container = document.getElementById('calendarApp');
         container.innerHTML = ""; 
@@ -351,13 +314,17 @@
     }
 
     function openPalette(el, dateText, dateIso) {
+        if(activeDayElement) activeDayElement.classList.remove('active-focus');
         activeDayElement = el; activeDateString = dateIso; 
+        activeDayElement.classList.add('active-focus'); // 選択中をハイライト
         document.getElementById('selectedDateDisplay').innerText = dateText;
         const overlay = document.getElementById('paletteOverlay'); const content = document.getElementById('paletteContent');
         overlay.style.display = 'block'; setTimeout(() => content.classList.add('show'), 10);
     }
 
-    function closePalette() {
+    function closePalette(e) {
+        if(e && e.target.id !== 'paletteOverlay' && e.type !== 'click') return; // 背景クリックまたは×ボタン以外は無視
+        if(activeDayElement) activeDayElement.classList.remove('active-focus');
         const content = document.getElementById('paletteContent'); content.classList.remove('show');
         setTimeout(() => { document.getElementById('paletteOverlay').style.display = 'none'; }, 300);
     }
@@ -365,29 +332,35 @@
     function applyShift(label, color, store) {
         if (!activeDayElement) return;
         
-        // グローバルデータの更新（削除 or 追加/上書き）
-        const existingIndex = globalShiftData.findIndex(item => item.user_id === CURRENT_USER_ID && item.date === activeDateString && item.store === store);
+        // ★ルールA：過去のデータを完全に削除（上書き）
+        globalShiftData = globalShiftData.filter(item => !(item.user_id === CURRENT_USER_ID && item.date === activeDateString));
         
         if (label) {
-            const newData = { user_id: CURRENT_USER_ID, user_name: "テストユーザー", date: activeDateString, shift_label: label, color: color, store: store };
-            if (existingIndex >= 0) globalShiftData[existingIndex] = newData;
-            else globalShiftData.push(newData);
-        } else {
-            // 消去の場合
-            if (existingIndex >= 0) globalShiftData.splice(existingIndex, 1);
+            globalShiftData.push({ user_id: CURRENT_USER_ID, user_name: "テストユーザー", date: activeDateString, shift_label: label, color: color, store: store });
         }
 
-        // 個人カレンダーの再描画（この日のみ）
+        // 画面の即時更新
         const area = activeDayElement.querySelector('.shift-area');
-        area.innerHTML = '';
-        const dayShifts = globalShiftData.filter(item => item.user_id === CURRENT_USER_ID && item.date === activeDateString);
-        dayShifts.forEach(shift => {
-            area.innerHTML += `<span class="shift-badge" style="background:${shift.color}">${shift.shift_label}</span>`;
-        });
+        area.innerHTML = label ? `<span class="shift-badge" style="background:${color}">${label}</span>` : '';
 
-        // GASへ送信
+        // GASへ送信（裏側で）
         saveDataToGas(activeDateString, label, color, store);
-        closePalette();
+
+        // ★自動スライド（翌日へフォーカス移動）
+        let nextDateObj = new Date(activeDateString);
+        nextDateObj.setDate(nextDateObj.getDate() + 1);
+        const nextIso = `${nextDateObj.getFullYear()}-${('0' + (nextDateObj.getMonth() + 1)).slice(-2)}-${('0' + nextDateObj.getDate()).slice(-2)}`;
+        const nextDayEl = document.querySelector(`.day[data-date="${nextIso}"]`);
+
+        if (nextDayEl) {
+            const dayOfWeek = ["日","月","火","水","木","金","土"][nextDateObj.getDay()];
+            const y = nextDateObj.getFullYear(); const m = nextDateObj.getMonth() + 1; const d = nextDateObj.getDate();
+            // 翌日の月が違う場合はスクロールする
+            nextDayEl.closest('.calendar-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            openPalette(nextDayEl, `${y} / ${m} / ${d} (${dayOfWeek})`, nextIso);
+        } else {
+            closePalette(); // 次の日がない（カレンダーの末尾）なら閉じる
+        }
     }
 
     function saveDataToGas(date, label, color, store) {
