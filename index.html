@@ -34,7 +34,6 @@
 
         .grid { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid #eee; }
         
-        /* ★ 曜日のヘッダー用スタイルを追加 */
         .day-header { text-align: center; font-size: 0.7rem; font-weight: bold; padding: 6px 0; background: #fff; border-bottom: 1px solid #eee; border-right: 1px solid #eee; color: #666; }
         .day-header:nth-child(7n) { border-right: none; }
         .day-header.sun { color: #ff5a5f; }
@@ -44,11 +43,8 @@
         .day:nth-child(7n) { border-right: none; }
         .day.sun { color: #ff5a5f; } 
         .day.sat { color: #007aff; }
-        /* ★ 祝日の赤文字対応 */
         .holiday { color: #ff5a5f !important; }
-        /* ★ 今日の背景色（薄いブルー） */
         .today { background-color: #e6f7ff; }
-        /* ★ 選択中のハイライト（今日の色より優先させる） */
         .day:active, .day.active-focus { background: #ffebeb !important; }
 
         .shift-badge { display: block; margin-top: 2px; padding: 4px 2px; border-radius: 4px; color: #fff; font-size: 0.65rem; font-weight: bold; line-height: 1.2; text-align: center; word-break: break-word; }
@@ -104,7 +100,7 @@
 
 <header>
     <div style="font-weight:bold;">
-        <img src="logo.png" alt="Logo" style="height: 80px; object-fit: contain; vertical-align: middle;">
+        <img src="logo.png" alt="Logo" style="height: 28px; object-fit: contain; vertical-align: middle;">
     </div>
     <div class="month-nav">2026</div>
     <div class="header-icons">
@@ -214,22 +210,19 @@
     let activeDayElement = null;
     let activeDateString = "";
     
-    // ★ 日本の祝日データを格納する変数
     let globalHolidays = {};
 
     window.onload = function() {
-        fetchHolidays(); // ★ 祝日データの取得を開始
+        fetchHolidays();
         renderAllPersonalCalendars();
         initializeLiff();
     };
 
-    // ★ 祝日APIからデータを取得する関数
     function fetchHolidays() {
         fetch('https://holidays-jp.github.io/api/v1/date.json')
             .then(res => res.json())
             .then(data => {
                 globalHolidays = data;
-                // 祝日データが取れたらカレンダーを再描画して赤色を反映
                 renderAllPersonalCalendars();
                 if (currentView === 'shared') renderSharedCalendars();
             })
@@ -433,7 +426,6 @@
             if (maxCount >= 5) { rowClass = "row-over"; } 
             else if (maxCount <= 3) { rowClass = "row-short"; }
 
-            // ★ 共有カレンダー：祝日なら dateClass に holiday を追加
             let dateClass = "date-col" + (dayOfWeek === 0 ? " sun" : "") + (dayOfWeek === 6 ? " sat" : "");
             if (globalHolidays[isoDate]) {
                 dateClass += " holiday";
@@ -483,7 +475,6 @@
         const grid = document.createElement('div'); grid.className = 'grid';
         const weekChars = ["日","月","火","水","木","金","土"];
         
-        // ★ 個人カレンダー：曜日ヘッダーの描画
         weekChars.forEach((w, idx) => {
             const dHeader = document.createElement('div');
             dHeader.className = 'day-header' + (idx === 0 ? ' sun' : (idx === 6 ? ' sat' : ''));
@@ -491,7 +482,6 @@
             grid.appendChild(dHeader);
         });
 
-        // 今日の日付を取得（ハイライト用）
         const todayObj = new Date();
         const todayIso = `${todayObj.getFullYear()}-${('0' + (todayObj.getMonth() + 1)).slice(-2)}-${('0' + todayObj.getDate()).slice(-2)}`;
 
@@ -504,14 +494,9 @@
             
             const dayDiv = document.createElement('div');
             
-            // ★ クラス名の判定（日曜、土曜、祝日、今日）
             let dClass = 'day' + (dateObj.getDay() === 0 ? ' sun' : '') + (dateObj.getDay() === 6 ? ' sat' : ''); 
-            if (globalHolidays[isoDate]) {
-                dClass += ' holiday'; // 祝日なら赤字クラスを追加
-            }
-            if (isoDate === todayIso) {
-                dClass += ' today'; // 今日なら背景色クラスを追加
-            }
+            if (globalHolidays[isoDate]) { dClass += ' holiday'; }
+            if (isoDate === todayIso) { dClass += ' today'; }
 
             dayDiv.className = dClass;
             dayDiv.setAttribute('data-date', isoDate);
@@ -576,10 +561,35 @@
         }
     }
 
+    // ★ 順番待ち（キュー）システムの変数
+    let saveQueue = [];
+    let isSaving = false;
+
+    // ★ データを一旦列に並ばせるように変更
     function saveDataToGas(date, label, color, store) {
         const data = { user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: date, shift_label: label, color: color, store: store };
+        saveQueue.push(data); // 列の最後尾に並ばせる
+        processQueue(); // 処理を開始
+    }
+
+    // ★ 順番に送信処理を行う関数
+    function processQueue() {
+        if (isSaving || saveQueue.length === 0) return; // 処理中、または列が空なら何もしない
+        
+        isSaving = true; // 処理中フラグを立てる
+        const data = saveQueue.shift(); // 列の先頭のデータを取り出す
+        
         fetch(GAS_URL, { method: 'POST', body: JSON.stringify(data), mode: 'no-cors', headers: { 'Content-Type': 'text/plain' } })
-        .then(() => console.log("Saved to GAS")).catch(err => console.error("Save Error:", err));
+        .then(() => {
+            console.log("Saved to GAS");
+            isSaving = false; // 処理完了
+            processQueue(); // 次の処理へ
+        })
+        .catch(err => {
+            console.error("Save Error:", err);
+            isSaving = false; 
+            processQueue(); // エラーが起きても列を止めずに次へ
+        });
     }
 
     function openSettings() {
