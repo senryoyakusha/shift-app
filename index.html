@@ -100,7 +100,7 @@
 
 <header>
     <div style="font-weight:bold;">
-        <img src="logo.png" alt="Logo" style="height: 28px; object-fit: contain; vertical-align: middle;">
+        <img src="logo.png" alt="Logo" style="height: 80px; object-fit: contain; vertical-align: middle;">
     </div>
     <div class="month-nav">2026</div>
     <div class="header-icons">
@@ -311,7 +311,6 @@
     }
 
     function fetchDataFromGas(forceUpdate = false) {
-        // ★ ③の修正：データを送信中（順番待ち中）は、古いデータを読み込まないようにブロック！
         if (isSaving && !forceUpdate) return;
 
         const loading = document.getElementById('loading');
@@ -320,6 +319,14 @@
         fetch(GAS_URL)
             .then(response => response.json())
             .then(data => {
+                // ★ 追加したバリア！
+                // データが届いた瞬間に「今スタンプ保存中かな？」を確認し、保存中なら上書きをキャンセル！
+                if (isSaving || saveQueue.length > 0) {
+                    console.log("スタンプ入力中のため、裏側のデータ更新をスキップしました");
+                    loading.style.display = 'none';
+                    return; 
+                }
+
                 const shifts = Array.isArray(data) ? data : (data.shifts || []);
                 globalUsersData = data.users || [];
                 globalShiftData = shifts.map(item => {
@@ -636,3 +643,4 @@
 </script>
 </body>
 </html>
+
