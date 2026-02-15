@@ -620,13 +620,22 @@
         fetch(GAS_URL, { method: 'POST', body: JSON.stringify(data), mode: 'no-cors', headers: { 'Content-Type': 'text/plain' } })
         .then(() => {
             console.log("Saved to GAS");
-            isSaving = false; 
-            processQueue(); 
+            
+            // ★ ここが魔法のバッファ！
+            // Googleのスパム制限を回避するため、1件送るごとに「1.5秒（1500ミリ秒）」の深呼吸を入れます。
+            setTimeout(() => {
+                isSaving = false; 
+                processQueue(); 
+            }, 1500);
         })
         .catch(err => {
             console.error("Save Error:", err);
-            isSaving = false; 
-            processQueue(); 
+            
+            // エラーが起きた時も焦らず1.5秒休んでから次へ
+            setTimeout(() => {
+                isSaving = false; 
+                processQueue(); 
+            }, 1500);
         });
     }
 
@@ -656,3 +665,4 @@
 </script>
 </body>
 </html>
+
