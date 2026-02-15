@@ -165,9 +165,10 @@
         </div>
 
         <div class="palette-section-title">■ 共通</div>
-        <div class="stamp-grid" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="stamp-grid" style="grid-template-columns: repeat(5, 1fr);">
             <button class="stamp" style="background:#ff5e99" onclick="applyShift('休み', '#ff5e99', 'common')">休み</button>
             <button class="stamp" style="background:#e63946" onclick="applyShift('希望休', '#e63946', 'common')">希望休</button>
+            <button class="stamp" style="background:#9381ff" onclick="applyShift('調整休み', '#9381ff', 'common')">調整休</button>
             <button class="stamp" style="background:var(--common-color)" onclick="applyShift('作業日', '#2a9d8f', 'common')">作業日</button>
             <button class="stamp s-del" onclick="applyShift('', '', '')">消去</button>
         </div>
@@ -210,14 +211,13 @@
     let saveQueue = [];
     let isSaving = false;
 
-    // ★ ④立ち上げ速度の修正：カレンダーの枠を先に作ってからキャッシュを流し込む！
     window.onload = function() {
         fetchHolidays();
-        renderAllPersonalCalendars(); // 先に枠を作る
+        renderAllPersonalCalendars();
         
         if(globalShiftData.length > 0 && globalUsersData.length > 0) {
             applyPermissions();
-            applyDataToPersonalCalendar(); // その後に流し込む！
+            applyDataToPersonalCalendar();
         }
         initializeLiff();
     };
@@ -319,8 +319,6 @@
         fetch(GAS_URL)
             .then(response => response.json())
             .then(data => {
-                // ★ 追加したバリア！
-                // データが届いた瞬間に「今スタンプ保存中かな？」を確認し、保存中なら上書きをキャンセル！
                 if (isSaving || saveQueue.length > 0) {
                     console.log("スタンプ入力中のため、裏側のデータ更新をスキップしました");
                     loading.style.display = 'none';
@@ -454,6 +452,7 @@
             tbody.appendChild(tr);
         }
         
+        // --- 合計行（時間） ---
         const trTotal = document.createElement('tr'); trTotal.className = 'total-row';
         let totalHtml = `<td class="date-col">合計</td>`;
         targetUsers.forEach(u => {
@@ -467,8 +466,23 @@
             });
             totalHtml += `<td>${userTotalHrs}h</td>`;
         });
-        
         trTotal.innerHTML = totalHtml; tbody.appendChild(trTotal);
+
+        // ★ 修正ポイント②：調整休みのカウント行を追加！
+        const trAdjust = document.createElement('tr'); trAdjust.className = 'total-row';
+        let adjustHtml = `<td class="date-col" style="font-size:0.65rem;">調整休</td>`;
+        targetUsers.forEach(u => {
+            let adjustCount = 0;
+            globalShiftData.forEach(shift => {
+                if (shift.user_id === u.id && shift.shift_label === '調整休み' && shift.date.startsWith(monthPrefix)) {
+                    adjustCount++;
+                }
+            });
+            // 0日の時は「0」、それ以外は「◯日」と表示
+            adjustHtml += `<td>${adjustCount > 0 ? adjustCount + '日' : '0'}</td>`;
+        });
+        trAdjust.innerHTML = adjustHtml; tbody.appendChild(trAdjust);
+        
         table.appendChild(tbody); tableWrap.appendChild(table); section.appendChild(tableWrap); container.appendChild(section);
     }
 
@@ -561,7 +575,6 @@
             globalShiftData.push({ user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: activeDateString, shift_label: label, color: color, store: store, work_hours: h, attendance_score: s });
         }
         
-        // ★ ③の修正：押した瞬間にスマホの記憶（キャッシュ）を上書きする！これで消えない！
         localStorage.setItem('cached_shifts', JSON.stringify(globalShiftData));
 
         applyDataToPersonalCalendar(); 
@@ -592,7 +605,7 @@
             color: color, 
             store: store,
             google_email: savedEmail,
-            sync_mode: syncMode // ★ ①の修正：連携モードも一緒に裏側へ送る
+            sync_mode: syncMode
         };
         saveQueue.push(data);
         processQueue(); 
@@ -643,4 +656,3 @@
 </script>
 </body>
 </html>
-
