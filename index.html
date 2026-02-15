@@ -86,10 +86,13 @@
         #settingsOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 300; }
         .settings-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; width: 90%; max-width: 400px; border-radius: 15px; padding: 25px 20px; box-sizing: border-box; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
         .settings-header { font-weight: bold; font-size: 1.2rem; color: #333; margin-bottom: 10px; text-align: center; }
-        .settings-desc { font-size: 0.8rem; color: #666; margin-bottom: 20px; line-height: 1.5; }
+        .settings-desc { font-size: 0.8rem; color: #666; margin-bottom: 15px; line-height: 1.5; }
+        .settings-radio { margin-bottom: 15px; font-size: 0.85rem; color: #444; }
+        .settings-radio label { display: block; margin-bottom: 10px; cursor: pointer; }
+        .settings-radio input { margin-right: 5px; transform: scale(1.1); }
         .btn-generate { display: block; width: 100%; padding: 12px; background: var(--main-red); color: #fff; text-align: center; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; }
         .btn-generate:active { opacity: 0.8; }
-        .url-input { width: 100%; padding: 12px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem; background: #fff; margin-bottom: 15px; }
+        .url-input { width: 100%; padding: 12px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem; background: #fff; margin-bottom: 10px; }
         .close-settings { position: absolute; top: 15px; right: 15px; font-size: 24px; color: #bbb; background: none; border: none; cursor: pointer; padding: 0 5px; }
     </style>
 </head>
@@ -176,10 +179,13 @@
         <button class="close-settings" onclick="closeSettings()">×</button>
         <div class="settings-header">📅 Googleカレンダー連携</div>
         <div class="settings-desc">
-            ここに自分のGmailアドレスを登録しておくと、シフトを入力した瞬間に自動であなたのGoogleカレンダーに予定が追加されます！<br><br>
-            <span style="color:#e63946; font-size:0.75rem;">※招待メールは届かず、静かにカレンダーに表示されます。</span>
+            ここに自分のGmailアドレスを登録しておくと、シフトを入力した瞬間に自動でカレンダーに予定が追加されます。
         </div>
         <input type="email" id="gmailInput" class="url-input" placeholder="例: you@gmail.com">
+        <div class="settings-radio">
+            <label><input type="radio" name="sync_mode" value="all" id="syncAll"> すべてのシフトを連携する</label>
+            <label><input type="radio" name="sync_mode" value="common" id="syncCommon"> 休み・作業日など共通のみ連携</label>
+        </div>
         <button class="btn-generate" onclick="saveGmail()">連携を保存する</button>
     </div>
 </div>
@@ -196,18 +202,23 @@
     
     let globalShiftData = JSON.parse(localStorage.getItem('cached_shifts')) || [];
     let globalUsersData = JSON.parse(localStorage.getItem('cached_users')) || [];
+    let syncMode = localStorage.getItem('shift_app_sync_mode') || 'all';
     
     let activeDayElement = null;
     let activeDateString = "";
     let globalHolidays = {};
+    let saveQueue = [];
+    let isSaving = false;
 
+    // ★ ④立ち上げ速度の修正：カレンダーの枠を先に作ってからキャッシュを流し込む！
     window.onload = function() {
         fetchHolidays();
+        renderAllPersonalCalendars(); // 先に枠を作る
+        
         if(globalShiftData.length > 0 && globalUsersData.length > 0) {
             applyPermissions();
-            applyDataToPersonalCalendar();
+            applyDataToPersonalCalendar(); // その後に流し込む！
         }
-        renderAllPersonalCalendars();
         initializeLiff();
     };
 
@@ -300,6 +311,9 @@
     }
 
     function fetchDataFromGas(forceUpdate = false) {
+        // ★ ③の修正：データを送信中（順番待ち中）は、古いデータを読み込まないようにブロック！
+        if (isSaving && !forceUpdate) return;
+
         const loading = document.getElementById('loading');
         if(globalShiftData.length === 0 || forceUpdate) loading.style.display = 'block'; 
 
@@ -539,6 +553,9 @@
             let s = (h >= 9) ? 1 : (h > 0 ? 0.5 : 0);
             globalShiftData.push({ user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: activeDateString, shift_label: label, color: color, store: store, work_hours: h, attendance_score: s });
         }
+        
+        // ★ ③の修正：押した瞬間にスマホの記憶（キャッシュ）を上書きする！これで消えない！
+        localStorage.setItem('cached_shifts', JSON.stringify(globalShiftData));
 
         applyDataToPersonalCalendar(); 
         saveDataToGas(activeDateString, label, color, store);
@@ -558,10 +575,6 @@
         }
     }
 
-    let saveQueue = [];
-    let isSaving = false;
-
-    // ★ データ送信時に、登録したGmailアドレスを一緒に送るように変更！
     function saveDataToGas(date, label, color, store) {
         const savedEmail = localStorage.getItem('shift_app_gmail') || "";
         const data = { 
@@ -571,7 +584,8 @@
             shift_label: label, 
             color: color, 
             store: store,
-            google_email: savedEmail // ここでアドレスを裏側にパス！
+            google_email: savedEmail,
+            sync_mode: syncMode // ★ ①の修正：連携モードも一緒に裏側へ送る
         };
         saveQueue.push(data);
         processQueue(); 
@@ -596,9 +610,13 @@
         });
     }
 
-    // ★ 設定画面の表示時に入力済みアドレスを読み込む
     function openSettings() {
         document.getElementById('gmailInput').value = localStorage.getItem('shift_app_gmail') || "";
+        if (syncMode === 'common') {
+            document.getElementById('syncCommon').checked = true;
+        } else {
+            document.getElementById('syncAll').checked = true;
+        }
         document.getElementById('settingsOverlay').style.display = 'block';
     }
 
@@ -606,11 +624,13 @@
         document.getElementById('settingsOverlay').style.display = 'none';
     }
 
-    // ★ 登録ボタンを押した時の処理
     function saveGmail() {
         const email = document.getElementById('gmailInput').value.trim();
+        const mode = document.getElementById('syncCommon').checked ? 'common' : 'all';
         localStorage.setItem('shift_app_gmail', email);
-        alert('連携アドレスを保存しました！\n次回からシフトを入力すると、自動でカレンダーに同期されます。');
+        localStorage.setItem('shift_app_sync_mode', mode);
+        syncMode = mode;
+        alert('連携設定を保存しました！');
         closeSettings();
     }
 </script>
