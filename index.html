@@ -211,36 +211,44 @@
     let saveQueue = [];
     let isSaving = false;
 
+    // ★ 1. アプリを開いた瞬間の動作（ここから勝負は始まっています）
     window.onload = function() {
-        fetchHolidays();
-        renderAllPersonalCalendars();
+        renderAllPersonalCalendars(); // まず枠を作る！
         
-        if(globalShiftData.length > 0 && globalUsersData.length > 0) {
-            applyPermissions();
+        // IDの記憶があれば、0秒で強制的にスタンプを描く！
+        if(globalShiftData.length > 0 && CURRENT_USER_ID !== "") {
+            if(globalUsersData.length > 0) applyPermissions();
             applyDataToPersonalCalendar();
         }
-        initializeLiff();
+        
+        fetchHolidays(); // 裏側でゆっくり祝日を取得させる
+        initializeLiff(); // 裏側でLINEのID確認とGASのデータ取得をさせる
     };
 
+    // ★ 2. 祝日データ取得の大改修（カレンダーを壊さない！）
     function fetchHolidays() {
         fetch('https://holidays-jp.github.io/api/v1/date.json')
             .then(res => res.json())
             .then(data => {
                 globalHolidays = data;
-                renderAllPersonalCalendars();
                 
-                // ★ここを追加！：祝日を描き直した直後に、記憶しているスタンプを即座に塗り直す！
-                if(globalShiftData.length > 0 && globalUsersData.length > 0) {
-                    applyDataToPersonalCalendar();
-                }
-                
+                // カレンダーを壊さずに、祝日の日だけピンポイントで色を塗る！
+                document.querySelectorAll('.day').forEach(el => {
+                    const dateIso = el.getAttribute('data-date');
+                    if (globalHolidays[dateIso]) {
+                        el.classList.add('holiday');
+                    }
+                });
+                // 共有カレンダーが開かれていたらそちらも更新
                 if (currentView === 'shared') renderSharedCalendars();
             })
             .catch(err => console.error("祝日データの取得に失敗しました:", err));
     }
 
+    // ★ 3. LINE ID確定時の大改修（ここで5秒待たせない！）
     function initializeLiff() {
         if(globalShiftData.length === 0) document.getElementById('loading').style.display = 'block';
+        
         liff.init({ liffId: LIFF_ID })
             .then(() => {
                 if (liff.isLoggedIn()) { return liff.getProfile(); } 
@@ -249,19 +257,29 @@
             .then(profile => {
                 if (profile) {
                     CURRENT_USER_ID = profile.userId;
-                    localStorage.setItem('shift_app_user_id', profile.userId); // ★ここを追加！
+                    localStorage.setItem('shift_app_user_id', profile.userId);
                     currentUserObj.id = profile.userId;
                     currentUserObj.name = profile.displayName;
                 } else {
                     CURRENT_USER_ID = getFallbackUserId();
                     currentUserObj.id = CURRENT_USER_ID;
                 }
+                
+                // ★大改修ポイント！：LINE IDが確定したこの瞬間に、GAS(5秒)を待たずに強制描写する！
+                if(globalShiftData.length > 0) {
+                    if(globalUsersData.length > 0) applyPermissions();
+                    applyDataToPersonalCalendar();
+                }
+                
+                // その後でゆっくりGASへ最新データを取りに行く
                 fetchDataFromGas();
             })
             .catch(err => {
                 console.error("LIFFエラー:", err);
                 CURRENT_USER_ID = getFallbackUserId();
                 currentUserObj.id = CURRENT_USER_ID;
+                
+                if(globalShiftData.length > 0) applyDataToPersonalCalendar();
                 fetchDataFromGas();
             });
     }
@@ -362,6 +380,10 @@
 
     function applyDataToPersonalCalendar() {
         document.querySelectorAll('.shift-area').forEach(el => el.innerHTML = '');
+        
+        // CURRENT_USER_IDが空っぽの時は描かない（エラー防止）
+        if(!CURRENT_USER_ID) return; 
+
         const myShifts = globalShiftData.filter(item => item.user_id === CURRENT_USER_ID);
         const monthlyHours = {};
 
@@ -459,7 +481,6 @@
             tbody.appendChild(tr);
         }
         
-        // --- 合計行（時間） ---
         const trTotal = document.createElement('tr'); trTotal.className = 'total-row';
         let totalHtml = `<td class="date-col">合計</td>`;
         targetUsers.forEach(u => {
@@ -475,7 +496,6 @@
         });
         trTotal.innerHTML = totalHtml; tbody.appendChild(trTotal);
 
-        // ★ 修正ポイント②：調整休みのカウント行を追加！
         const trAdjust = document.createElement('tr'); trAdjust.className = 'total-row';
         let adjustHtml = `<td class="date-col" style="font-size:0.65rem;">調整休</td>`;
         targetUsers.forEach(u => {
@@ -485,7 +505,6 @@
                     adjustCount++;
                 }
             });
-            // 0日の時は「0」、それ以外は「◯日」と表示
             adjustHtml += `<td>${adjustCount > 0 ? adjustCount + '日' : '0'}</td>`;
         });
         trAdjust.innerHTML = adjustHtml; tbody.appendChild(trAdjust);
@@ -627,9 +646,6 @@
         fetch(GAS_URL, { method: 'POST', body: JSON.stringify(data), mode: 'no-cors', headers: { 'Content-Type': 'text/plain' } })
         .then(() => {
             console.log("Saved to GAS");
-            
-            // ★ ここが魔法のバッファ！
-            // Googleのスパム制限を回避するため、1件送るごとに「1.5秒（1500ミリ秒）」の深呼吸を入れます。
             setTimeout(() => {
                 isSaving = false; 
                 processQueue(); 
@@ -637,8 +653,6 @@
         })
         .catch(err => {
             console.error("Save Error:", err);
-            
-            // エラーが起きた時も焦らず1.5秒休んでから次へ
             setTimeout(() => {
                 isSaving = false; 
                 processQueue(); 
@@ -672,6 +686,3 @@
 </script>
 </body>
 </html>
-
-
-
