@@ -25,11 +25,9 @@
         .store-tab.active-annee { color: var(--annee-g1); border-bottom-color: var(--annee-g1); }
         .store-tab.active-yoki { color: var(--yoki-g1); border-bottom-color: var(--yoki-g1); }
 
-        /* ★ 個人カレンダーは横スクロールのまま */
         #calendarApp { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
         .calendar-section { flex: 0 0 100%; width: 100%; background: #fff; scroll-snap-align: start; box-sizing: border-box; }
         
-        /* ★ 共有カレンダーは縦並び（縦スクロール）に変更 */
         #sharedCalendarApp { display: block; }
         .shared-section { width: 100%; background: #fff; box-sizing: border-box; margin-bottom: 20px; }
         
@@ -54,7 +52,6 @@
 
         .shift-badge { display: block; margin-top: 2px; padding: 4px 2px; border-radius: 4px; color: #fff; font-size: 0.65rem; font-weight: bold; line-height: 1.2; text-align: center; word-break: break-word; }
 
-        /* ★ 縦並びにあわせてテーブルを全展開するように修正 */
         .table-wrap { overflow-x: auto; }
         .shared-table { border-collapse: collapse; width: 100%; min-width: 400px; font-size: 0.8rem; }
         .shared-table th, .shared-table td { border: 1px solid #eee; text-align: center; padding: 4px 2px; vertical-align: middle; }
@@ -90,15 +87,9 @@
         .settings-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; width: 90%; max-width: 400px; border-radius: 15px; padding: 25px 20px; box-sizing: border-box; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
         .settings-header { font-weight: bold; font-size: 1.2rem; color: #333; margin-bottom: 10px; text-align: center; }
         .settings-desc { font-size: 0.8rem; color: #666; margin-bottom: 20px; line-height: 1.5; }
-        .settings-radio { margin-bottom: 20px; font-size: 0.9rem; color: #444; }
-        .settings-radio label { display: flex; align-items: center; margin-bottom: 12px; cursor: pointer; }
-        .settings-radio input { margin-right: 8px; transform: scale(1.2); }
         .btn-generate { display: block; width: 100%; padding: 12px; background: var(--main-red); color: #fff; text-align: center; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; }
         .btn-generate:active { opacity: 0.8; }
-        
-        .url-box { margin-top: 20px; display: none; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #eee; }
-        .url-input { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 5px; font-size: 0.75rem; background: #fff; margin-bottom: 10px; resize: none; word-break: break-all; }
-        .btn-copy { display: block; width: 100%; padding: 10px; background: #007aff; color: #fff; text-align: center; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .url-input { width: 100%; padding: 12px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem; background: #fff; margin-bottom: 15px; }
         .close-settings { position: absolute; top: 15px; right: 15px; font-size: 24px; color: #bbb; background: none; border: none; cursor: pointer; padding: 0 5px; }
     </style>
 </head>
@@ -183,22 +174,13 @@
 <div id="settingsOverlay">
     <div class="settings-content">
         <button class="close-settings" onclick="closeSettings()">×</button>
-        <div class="settings-header">📅 カレンダー連携</div>
+        <div class="settings-header">📅 Googleカレンダー連携</div>
         <div class="settings-desc">
-            アプリのシフト情報を、GoogleカレンダーやTimeTree、iPhone標準カレンダーに自動で同期できます。
+            ここに自分のGmailアドレスを登録しておくと、シフトを入力した瞬間に自動であなたのGoogleカレンダーに予定が追加されます！<br><br>
+            <span style="color:#e63946; font-size:0.75rem;">※招待メールは届かず、静かにカレンダーに表示されます。</span>
         </div>
-        <div class="settings-radio">
-            <label><input type="radio" name="sync_mode" value="all" checked> すべてのシフトを連携する</label>
-            <label><input type="radio" name="sync_mode" value="common"> 休み・作業日など共通のみ連携</label>
-        </div>
-        <button class="btn-generate" onclick="generateIcalUrl()">同期URLを発行する</button>
-        <div id="icalUrlContainer" class="url-box">
-            <div style="font-size:0.75rem; color:#666; margin-bottom:8px;">
-                以下のURLをコピーして、外部カレンダーアプリの「URLで照会/追加」画面に貼り付けてください。
-            </div>
-            <textarea id="icalUrlDisplay" class="url-input" rows="3" readonly></textarea>
-            <button class="btn-copy" onclick="copyIcalUrl()">URLをコピー</button>
-        </div>
+        <input type="email" id="gmailInput" class="url-input" placeholder="例: you@gmail.com">
+        <button class="btn-generate" onclick="saveGmail()">連携を保存する</button>
     </div>
 </div>
 
@@ -212,7 +194,6 @@
     let currentStore = localStorage.getItem('shift_app_store') || 'annee';
     let currentView = 'personal';
     
-    // ★ 待ち時間ゼロの魔法：スマホに保存されている前回のデータを一瞬で読み込む！
     let globalShiftData = JSON.parse(localStorage.getItem('cached_shifts')) || [];
     let globalUsersData = JSON.parse(localStorage.getItem('cached_users')) || [];
     
@@ -222,13 +203,10 @@
 
     window.onload = function() {
         fetchHolidays();
-        
-        // ★ キャッシュデータがあれば、待たせずにすぐ画面を描画する！
         if(globalShiftData.length > 0 && globalUsersData.length > 0) {
             applyPermissions();
             applyDataToPersonalCalendar();
         }
-        
         renderAllPersonalCalendars();
         initializeLiff();
     };
@@ -245,9 +223,7 @@
     }
 
     function initializeLiff() {
-        // ★ キャッシュがない初回のみ「読込中...」を出す
         if(globalShiftData.length === 0) document.getElementById('loading').style.display = 'block';
-        
         liff.init({ liffId: LIFF_ID })
             .then(() => {
                 if (liff.isLoggedIn()) { return liff.getProfile(); } 
@@ -278,7 +254,6 @@
         return id;
     }
 
-    // LINEから戻ってきた時も、裏側でこっそり最新を取得する
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === 'visible' && CURRENT_USER_ID !== "") {
             fetchDataFromGas(); 
@@ -324,7 +299,6 @@
         if (currentView === 'shared') renderSharedCalendars();
     }
 
-    // ★ 裏側でデータを取得する関数（forceUpdateがtrueの時は強制的にロード画面を出す）
     function fetchDataFromGas(forceUpdate = false) {
         const loading = document.getElementById('loading');
         if(globalShiftData.length === 0 || forceUpdate) loading.style.display = 'block'; 
@@ -339,7 +313,6 @@
                     return item;
                 });
                 
-                // ★ 取得した最新データをスマホに記憶（キャッシュ）させる！
                 localStorage.setItem('cached_shifts', JSON.stringify(globalShiftData));
                 localStorage.setItem('cached_users', JSON.stringify(globalUsersData));
                 
@@ -588,8 +561,18 @@
     let saveQueue = [];
     let isSaving = false;
 
+    // ★ データ送信時に、登録したGmailアドレスを一緒に送るように変更！
     function saveDataToGas(date, label, color, store) {
-        const data = { user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: date, shift_label: label, color: color, store: store };
+        const savedEmail = localStorage.getItem('shift_app_gmail') || "";
+        const data = { 
+            user_id: CURRENT_USER_ID, 
+            user_name: currentUserObj.name, 
+            date: date, 
+            shift_label: label, 
+            color: color, 
+            store: store,
+            google_email: savedEmail // ここでアドレスを裏側にパス！
+        };
         saveQueue.push(data);
         processQueue(); 
     }
@@ -613,27 +596,22 @@
         });
     }
 
+    // ★ 設定画面の表示時に入力済みアドレスを読み込む
     function openSettings() {
+        document.getElementById('gmailInput').value = localStorage.getItem('shift_app_gmail') || "";
         document.getElementById('settingsOverlay').style.display = 'block';
-        document.getElementById('icalUrlContainer').style.display = 'none';
     }
 
     function closeSettings() {
         document.getElementById('settingsOverlay').style.display = 'none';
     }
 
-    function generateIcalUrl() {
-        const mode = document.querySelector('input[name="sync_mode"]:checked').value;
-        const url = GAS_URL + "?ical=" + CURRENT_USER_ID + "&mode=" + mode;
-        document.getElementById('icalUrlDisplay').value = url;
-        document.getElementById('icalUrlContainer').style.display = 'block';
-    }
-
-    function copyIcalUrl() {
-        const copyText = document.getElementById("icalUrlDisplay");
-        copyText.select();
-        document.execCommand("copy");
-        alert("コピーしました！\nTimeTreeやGoogleカレンダーの「URLで照会/追加」から登録してください。");
+    // ★ 登録ボタンを押した時の処理
+    function saveGmail() {
+        const email = document.getElementById('gmailInput').value.trim();
+        localStorage.setItem('shift_app_gmail', email);
+        alert('連携アドレスを保存しました！\n次回からシフトを入力すると、自動でカレンダーに同期されます。');
+        closeSettings();
     }
 </script>
 </body>
