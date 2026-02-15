@@ -228,6 +228,12 @@
             .then(data => {
                 globalHolidays = data;
                 renderAllPersonalCalendars();
+                
+                // ★ここを追加！：祝日を描き直した直後に、記憶しているスタンプを即座に塗り直す！
+                if(globalShiftData.length > 0 && globalUsersData.length > 0) {
+                    applyDataToPersonalCalendar();
+                }
+                
                 if (currentView === 'shared') renderSharedCalendars();
             })
             .catch(err => console.error("祝日データの取得に失敗しました:", err));
@@ -666,5 +672,6 @@
 </script>
 </body>
 </html>
+
 
 
