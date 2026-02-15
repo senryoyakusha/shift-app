@@ -195,7 +195,7 @@
     const LIFF_ID = "2009130838-xQhedkHz";
     const GAS_URL = "https://script.google.com/macros/s/AKfycbz3Cnb2C_o8xjb9I_I_0jfgNXMhmo_TzcLh76MQ8FqYg9lYRx3VdEo4OdNVxpJO2fYl/exec";
 
-    let CURRENT_USER_ID = "";
+    let CURRENT_USER_ID = localStorage.getItem('shift_app_user_id') || "";
     let currentUserObj = { id: "", name: "あなた", stores: ['annee', 'yoki.'], is_boss: true, is_core: true };
 
     let currentStore = localStorage.getItem('shift_app_store') || 'annee';
@@ -243,6 +243,7 @@
             .then(profile => {
                 if (profile) {
                     CURRENT_USER_ID = profile.userId;
+                    localStorage.setItem('shift_app_user_id', profile.userId); // ★ここを追加！
                     currentUserObj.id = profile.userId;
                     currentUserObj.name = profile.displayName;
                 } else {
@@ -665,4 +666,5 @@
 </script>
 </body>
 </html>
+
 
