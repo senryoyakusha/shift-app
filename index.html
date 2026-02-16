@@ -215,63 +215,27 @@
     let saveQueue = [];
     let isSaving = false;
 
-    // ★ 永久ログイン（CodeFlow）の準備
-    let codeClient;
-
+    // ★大改造：LINEを脱出して外部ブラウザでGoogleログイン画面を直接開く！
     function loginGoogle() {
-        // ボタンを押した瞬間に、確実にGoogleシステムをセットアップする
-        if (!codeClient) {
-            if (typeof google === 'undefined' || !google.accounts) {
-                alert("Googleシステムの読み込みに失敗しました。画面を一度更新（リロード）してください。");
-                return;
-            }
-            codeClient = google.accounts.oauth2.initCodeClient({
-                client_id: '1064442899084-tnm7c9h1nn1heosf6uku6a7kamj1qt8b.apps.googleusercontent.com',
-                scope: 'https://www.googleapis.com/auth/calendar.events',
-                ux_mode: 'popup',
-                callback: (response) => {
-                    if (response.code) {
-                        sendCodeToGas(response.code); // 裏側に暗号を送る
-                    }
-                },
-            });
-        }
-        codeClient.requestCode(); // ログイン画面を開く
-    }
-
-    // ★取得した暗号(Code)を裏側(GAS)に送って永久パスを発行させる
-    function sendCodeToGas(code) {
-        if (!codeClient) {
-            alert("システムの準備中です。数秒待ってからもう一度押してください。");
+        if (!CURRENT_USER_ID) {
+            alert("ユーザー情報を取得中です。数秒待ってからもう一度押してください。");
             return;
         }
-        codeClient.requestCode(); // ログイン画面を開く
-    }
-
-    // ★取得した暗号(Code)を裏側(GAS)に送って永久パスを発行させる
-    function sendCodeToGas(code) {
-        document.getElementById('loading').style.display = 'block';
-        const data = {
-            action: "google_login",
-            code: code,
-            user_id: CURRENT_USER_ID
-        };
-        fetch(GAS_URL, { 
-            method: 'POST', 
-            body: JSON.stringify(data), 
-            mode: 'no-cors', 
-            headers: { 'Content-Type': 'text/plain' } 
-        })
-        .then(() => {
-            document.getElementById('loading').style.display = 'none';
-            alert("✅ カレンダー連携が完了しました！\nこれでもう二度とログインしなくて大丈夫です✨");
-            closeSettings();
-        })
-        .catch(err => {
-            document.getElementById('loading').style.display = 'none';
-            alert("連携処理を送信しました！");
-            closeSettings();
-        });
+        
+        const clientId = "1064442899084-tnm7c9h1nn1heosf6uku6a7kamj1qt8b.apps.googleusercontent.com";
+        const redirectUri = GAS_URL; // 戻ってくる場所（GASのURL）
+        const scope = encodeURIComponent("https://www.googleapis.com/auth/calendar.events");
+        const state = CURRENT_USER_ID; // 誰がログインしたかの目印
+        
+        // Googleのログイン画面への直通URL
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${state}`;
+        
+        // LINEの中で開いている場合は、強制的にSafariやChromeを開かせる！
+        if (liff.isInClient()) {
+            liff.openWindow({ url: authUrl, external: true });
+        } else {
+            window.open(authUrl, '_blank');
+        }
     }
 
     window.onload = function() {
@@ -668,7 +632,6 @@
         }
     }
 
-    // ★トークンチェックを消去！ただ保存するだけ！
     function saveDataToGas(date, label, color, store) {
         const data = { 
             user_id: CURRENT_USER_ID, 
@@ -729,4 +692,5 @@
 </script>
 </body>
 </html>
+
 
