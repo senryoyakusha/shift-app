@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>シフト管理</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         :root { 
             --main-red: #ff5a5f; --bg-gray: #f8f8f8; 
@@ -92,7 +93,6 @@
         .settings-radio input { margin-right: 5px; transform: scale(1.1); }
         .btn-generate { display: block; width: 100%; padding: 12px; background: var(--main-red); color: #fff; text-align: center; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; }
         .btn-generate:active { opacity: 0.8; }
-        .url-input { width: 100%; padding: 12px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem; background: #fff; margin-bottom: 10px; }
         .close-settings { position: absolute; top: 15px; right: 15px; font-size: 24px; color: #bbb; background: none; border: none; cursor: pointer; padding: 0 5px; }
     </style>
 </head>
@@ -180,14 +180,18 @@
         <button class="close-settings" onclick="closeSettings()">×</button>
         <div class="settings-header">📅 Googleカレンダー連携</div>
         <div class="settings-desc">
-            ここに自分のGmailアドレスを登録しておくと、シフトを入力した瞬間に自動でカレンダーに予定が追加されます。
+            ここにGoogleアカウントでログインしておくと、シフトを入力した瞬間に自動で自分のカレンダーに予定が追加されます。
         </div>
-        <input type="email" id="gmailInput" class="url-input" placeholder="例: you@gmail.com">
+        <button type="button" onclick="loginGoogle()" style="padding:12px; background:#4285F4; color:white; border:none; border-radius:8px; width:100%; font-weight:bold; font-size:1rem; margin-bottom:5px; cursor:pointer;">
+            Googleカレンダー連携（ログイン）
+        </button>
+        <p style="font-size:0.75rem; color:gray; margin-top:0; margin-bottom:15px;">※セキュリティ上、1時間ごとに再ログインが必要です</p>
+
         <div class="settings-radio">
             <label><input type="radio" name="sync_mode" value="all" id="syncAll"> すべてのシフトを連携する</label>
             <label><input type="radio" name="sync_mode" value="common" id="syncCommon"> 休み・作業日など共通のみ連携</label>
         </div>
-        <button class="btn-generate" onclick="saveGmail()">連携を保存する</button>
+        <button class="btn-generate" onclick="saveSettings()">設定を閉じる</button>
     </div>
 </div>
 
@@ -211,41 +215,66 @@
     let saveQueue = [];
     let isSaving = false;
 
-    // ★ 1. アプリを開いた瞬間の動作（ここから勝負は始まっています）
+    // ★追加: Google認証の準備と変数
+    let tokenClient;
+    let gapiAccessToken = localStorage.getItem('gapi_access_token') || "";
+
+    window.addEventListener('load', () => {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: '1064442899084-tnm7c9h1nn1heosf6uku6a7kamj1qt8b.apps.googleusercontent.com',
+            scope: 'https://www.googleapis.com/auth/calendar.events',
+            callback: (tokenResponse) => {
+                if (tokenResponse && tokenResponse.access_token) {
+                    gapiAccessToken = tokenResponse.access_token;
+                    localStorage.setItem('gapi_access_token', gapiAccessToken);
+                    localStorage.setItem('gapi_token_time', Date.now());
+                    alert("✅ カレンダー連携に成功しました！\nこのままシフトを入力できます。");
+                }
+            },
+        });
+    });
+
+    // ★追加: Googleログインボタンを押したときの処理
+    function loginGoogle() {
+        if (!tokenClient) {
+            alert("システムの準備中です。数秒待ってからもう一度押してください。");
+            return;
+        }
+        tokenClient.requestAccessToken();
+    }
+
+    // ★ 1. アプリを開いた瞬間の動作
     window.onload = function() {
-        renderAllPersonalCalendars(); // まず枠を作る！
+        renderAllPersonalCalendars(); 
         
-        // IDの記憶があれば、0秒で強制的にスタンプを描く！
         if(globalShiftData.length > 0 && CURRENT_USER_ID !== "") {
             if(globalUsersData.length > 0) applyPermissions();
             applyDataToPersonalCalendar();
         }
         
-        fetchHolidays(); // 裏側でゆっくり祝日を取得させる
-        initializeLiff(); // 裏側でLINEのID確認とGASのデータ取得をさせる
+        fetchHolidays(); 
+        initializeLiff(); 
     };
 
-    // ★ 2. 祝日データ取得の大改修（カレンダーを壊さない！）
+    // ★ 2. 祝日データ取得の大改修
     function fetchHolidays() {
         fetch('https://holidays-jp.github.io/api/v1/date.json')
             .then(res => res.json())
             .then(data => {
                 globalHolidays = data;
                 
-                // カレンダーを壊さずに、祝日の日だけピンポイントで色を塗る！
                 document.querySelectorAll('.day').forEach(el => {
                     const dateIso = el.getAttribute('data-date');
                     if (globalHolidays[dateIso]) {
                         el.classList.add('holiday');
                     }
                 });
-                // 共有カレンダーが開かれていたらそちらも更新
                 if (currentView === 'shared') renderSharedCalendars();
             })
             .catch(err => console.error("祝日データの取得に失敗しました:", err));
     }
 
-    // ★ 3. LINE ID確定時の大改修（ここで5秒待たせない！）
+    // ★ 3. LINE ID確定時の大改修
     function initializeLiff() {
         if(globalShiftData.length === 0) document.getElementById('loading').style.display = 'block';
         
@@ -265,13 +294,11 @@
                     currentUserObj.id = CURRENT_USER_ID;
                 }
                 
-                // ★大改修ポイント！：LINE IDが確定したこの瞬間に、GAS(5秒)を待たずに強制描写する！
                 if(globalShiftData.length > 0) {
                     if(globalUsersData.length > 0) applyPermissions();
                     applyDataToPersonalCalendar();
                 }
                 
-                // その後でゆっくりGASへ最新データを取りに行く
                 fetchDataFromGas();
             })
             .catch(err => {
@@ -381,7 +408,6 @@
     function applyDataToPersonalCalendar() {
         document.querySelectorAll('.shift-area').forEach(el => el.innerHTML = '');
         
-        // CURRENT_USER_IDが空っぽの時は描かない（エラー防止）
         if(!CURRENT_USER_ID) return; 
 
         const myShifts = globalShiftData.filter(item => item.user_id === CURRENT_USER_ID);
@@ -621,8 +647,8 @@
         }
     }
 
+    // ★変更: 送信データにトークンを付与する仕組みを追加
     function saveDataToGas(date, label, color, store) {
-        const savedEmail = localStorage.getItem('shift_app_gmail') || "";
         const data = { 
             user_id: CURRENT_USER_ID, 
             user_name: currentUserObj.name, 
@@ -630,13 +656,25 @@
             shift_label: label, 
             color: color, 
             store: store,
-            google_email: savedEmail,
             sync_mode: syncMode
         };
+
+        // トークンチェック処理
+        const savedToken = localStorage.getItem('gapi_access_token');
+        if (savedToken) {
+            const savedTime = localStorage.getItem('gapi_token_time');
+            if (Date.now() - savedTime > 3000000) {
+                alert("⚠️ カレンダーの認証期限（1時間）が切れています。\n設定（⚙️）から「Googleカレンダー連携」をやり直してください🙇‍♂️");
+                return; // 期限切れなら保存をストップ！
+            }
+            data.gapi_token = savedToken;
+        }
+
         saveQueue.push(data);
         processQueue(); 
     }
 
+    // ★変更: 待機時間（深呼吸）を 1.5秒から 0.2秒 に大幅短縮！
     function processQueue() {
         if (isSaving || saveQueue.length === 0) return; 
         
@@ -649,19 +687,18 @@
             setTimeout(() => {
                 isSaving = false; 
                 processQueue(); 
-            }, 1500);
+            }, 200); // ★ここを0.2秒(200ms)に短縮
         })
         .catch(err => {
             console.error("Save Error:", err);
             setTimeout(() => {
                 isSaving = false; 
                 processQueue(); 
-            }, 1500);
+            }, 200); // ★ここも短縮
         });
     }
 
     function openSettings() {
-        document.getElementById('gmailInput').value = localStorage.getItem('shift_app_gmail') || "";
         if (syncMode === 'common') {
             document.getElementById('syncCommon').checked = true;
         } else {
@@ -674,13 +711,12 @@
         document.getElementById('settingsOverlay').style.display = 'none';
     }
 
-    function saveGmail() {
-        const email = document.getElementById('gmailInput').value.trim();
+    // ★変更: 設定を保存して閉じる関数
+    function saveSettings() {
         const mode = document.getElementById('syncCommon').checked ? 'common' : 'all';
-        localStorage.setItem('shift_app_gmail', email);
         localStorage.setItem('shift_app_sync_mode', mode);
         syncMode = mode;
-        alert('連携設定を保存しました！');
+        alert('設定を保存しました！');
         closeSettings();
     }
 </script>
