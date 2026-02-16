@@ -94,10 +94,17 @@
         .btn-generate { display: block; width: 100%; padding: 12px; background: var(--main-red); color: #fff; text-align: center; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; }
         .btn-generate:active { opacity: 0.8; }
         .close-settings { position: absolute; top: 15px; right: 15px; font-size: 24px; color: #bbb; background: none; border: none; cursor: pointer; padding: 0 5px; }
+        #saveStatus {
+    position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.8); color: #fff; padding: 6px 15px; border-radius: 20px;
+    font-size: 0.8rem; font-weight: bold; z-index: 400; opacity: 0; pointer-events: none;
+    transition: opacity 0.3s;
+}
+.status-show { opacity: 1 !important; }
     </style>
 </head>
 <body>
-
+<div id="saveStatus">🔄 保存中...</div>
 <header>
     <div style="font-weight:bold;">
         <img src="logo.png" alt="Logo" style="height: 80px; object-fit: contain; vertical-align: middle;">
@@ -643,6 +650,13 @@
             sync_mode: syncMode
         };
         saveQueue.push(data);
+        
+        // ★追加：保存中マークを表示する
+        const statusEl = document.getElementById('saveStatus');
+        statusEl.innerText = '🔄 保存中...';
+        statusEl.style.background = 'rgba(0,0,0,0.8)';
+        statusEl.classList.add('status-show');
+
         processQueue(); 
     }
 
@@ -654,19 +668,36 @@
         
         fetch(GAS_URL, { method: 'POST', body: JSON.stringify(data), mode: 'no-cors', headers: { 'Content-Type': 'text/plain' } })
         .then(() => {
-            console.log("Saved to GAS");
             setTimeout(() => {
                 isSaving = false; 
+                checkQueueDone(); // ★追加：終わったかチェック
                 processQueue(); 
-            }, 800); 
+            }, 800); // ★ここを800に変更
         })
         .catch(err => {
             console.error("Save Error:", err);
             setTimeout(() => {
                 isSaving = false; 
+                checkQueueDone(); // ★追加：終わったかチェック
                 processQueue(); 
-            }, 800); 
+            }, 800); // ★ここも800に変更
         });
+    }
+
+    // ★追加：キュー（順番待ち）が空になったら「完了」を出す関数
+    function checkQueueDone() {
+        if (saveQueue.length === 0) {
+            const statusEl = document.getElementById('saveStatus');
+            statusEl.innerText = '✅ 保存完了！';
+            statusEl.style.background = 'rgba(42, 157, 143, 0.9)'; // 緑色にする
+            
+            // 1.5秒後にフワッと消す
+            setTimeout(() => {
+                if (saveQueue.length === 0) { // その間に新しいスタンプが押されていなければ
+                    statusEl.classList.remove('status-show');
+                }
+            }, 1500);
+        }
     }
 
     function openSettings() {
@@ -692,6 +723,7 @@
 </script>
 </body>
 </html>
+
 
 
 
