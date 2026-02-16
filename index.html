@@ -615,7 +615,17 @@
         globalShiftData = globalShiftData.filter(item => !(item.user_id === CURRENT_USER_ID && item.date === activeDateString));
         if (label) {
             let h = calcShiftData(label);
-            let s = (h >= 9) ? 1 : (h > 0 ? 0.5 : 0);
+            
+            // ★変更：点数（s）の計算ルール
+            let s = 0;
+            if (label.includes('休')) {
+                s = 0; // 休み系は0点
+            } else if (label.includes('1621') || label.includes('1721')) {
+                s = 0.5; // 1621と1721は0.5点
+            } else {
+                s = 1; // それ以外（0919や作業日など）はすべて1点
+            }
+
             globalShiftData.push({ user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: activeDateString, shift_label: label, color: color, store: store, work_hours: h, attendance_score: s });
         }
         
@@ -723,6 +733,7 @@
 </script>
 </body>
 </html>
+
 
 
 
