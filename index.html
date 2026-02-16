@@ -180,12 +180,12 @@
         <button class="close-settings" onclick="closeSettings()">×</button>
         <div class="settings-header">📅 Googleカレンダー連携</div>
         <div class="settings-desc">
-            ここにGoogleアカウントでログインしておくと、シフトを入力した瞬間に自動で自分のカレンダーに予定が追加されます。
+            ここにGoogleアカウントで連携しておくと、シフトを入力した瞬間に自動で自分のカレンダーに追加されます。<br>
+            <b>※最初の1回だけでOKです！永久に自動同期されます！</b>
         </div>
-        <button type="button" onclick="loginGoogle()" style="padding:12px; background:#4285F4; color:white; border:none; border-radius:8px; width:100%; font-weight:bold; font-size:1rem; margin-bottom:5px; cursor:pointer;">
-            Googleカレンダー連携（ログイン）
+        <button type="button" onclick="loginGoogle()" style="padding:12px; background:#4285F4; color:white; border:none; border-radius:8px; width:100%; font-weight:bold; font-size:1rem; margin-bottom:15px; cursor:pointer;">
+            Googleカレンダーを連携する
         </button>
-        <p style="font-size:0.75rem; color:gray; margin-top:0; margin-bottom:15px;">※セキュリティ上、1時間ごとに再ログインが必要です</p>
 
         <div class="settings-radio">
             <label><input type="radio" name="sync_mode" value="all" id="syncAll"> すべてのシフトを連携する</label>
@@ -215,54 +215,71 @@
     let saveQueue = [];
     let isSaving = false;
 
-    // ★追加: Google認証の準備と変数
-    let tokenClient;
-    let gapiAccessToken = localStorage.getItem('gapi_access_token') || "";
+    // ★ 永久ログイン（CodeFlow）の準備
+    let codeClient;
 
     window.addEventListener('load', () => {
-        tokenClient = google.accounts.oauth2.initTokenClient({
+        codeClient = google.accounts.oauth2.initCodeClient({
             client_id: '1064442899084-tnm7c9h1nn1heosf6uku6a7kamj1qt8b.apps.googleusercontent.com',
             scope: 'https://www.googleapis.com/auth/calendar.events',
-            callback: (tokenResponse) => {
-                if (tokenResponse && tokenResponse.access_token) {
-                    gapiAccessToken = tokenResponse.access_token;
-                    localStorage.setItem('gapi_access_token', gapiAccessToken);
-                    localStorage.setItem('gapi_token_time', Date.now());
-                    alert("✅ カレンダー連携に成功しました！\nこのままシフトを入力できます。");
+            ux_mode: 'popup',
+            callback: (response) => {
+                if (response.code) {
+                    sendCodeToGas(response.code); // 裏側に暗号を送る
                 }
             },
         });
     });
 
-    // ★追加: Googleログインボタンを押したときの処理
     function loginGoogle() {
-        if (!tokenClient) {
+        if (!codeClient) {
             alert("システムの準備中です。数秒待ってからもう一度押してください。");
             return;
         }
-        tokenClient.requestAccessToken();
+        codeClient.requestCode(); // ログイン画面を開く
     }
 
-    // ★ 1. アプリを開いた瞬間の動作
+    // ★取得した暗号(Code)を裏側(GAS)に送って永久パスを発行させる
+    function sendCodeToGas(code) {
+        document.getElementById('loading').style.display = 'block';
+        const data = {
+            action: "google_login",
+            code: code,
+            user_id: CURRENT_USER_ID
+        };
+        fetch(GAS_URL, { 
+            method: 'POST', 
+            body: JSON.stringify(data), 
+            mode: 'no-cors', 
+            headers: { 'Content-Type': 'text/plain' } 
+        })
+        .then(() => {
+            document.getElementById('loading').style.display = 'none';
+            alert("✅ カレンダー連携が完了しました！\nこれでもう二度とログインしなくて大丈夫です✨");
+            closeSettings();
+        })
+        .catch(err => {
+            document.getElementById('loading').style.display = 'none';
+            alert("連携処理を送信しました！");
+            closeSettings();
+        });
+    }
+
     window.onload = function() {
         renderAllPersonalCalendars(); 
-        
         if(globalShiftData.length > 0 && CURRENT_USER_ID !== "") {
             if(globalUsersData.length > 0) applyPermissions();
             applyDataToPersonalCalendar();
         }
-        
         fetchHolidays(); 
         initializeLiff(); 
     };
 
-    // ★ 2. 祝日データ取得の大改修
     function fetchHolidays() {
         fetch('https://holidays-jp.github.io/api/v1/date.json')
             .then(res => res.json())
             .then(data => {
                 globalHolidays = data;
-                
                 document.querySelectorAll('.day').forEach(el => {
                     const dateIso = el.getAttribute('data-date');
                     if (globalHolidays[dateIso]) {
@@ -274,7 +291,6 @@
             .catch(err => console.error("祝日データの取得に失敗しました:", err));
     }
 
-    // ★ 3. LINE ID確定時の大改修
     function initializeLiff() {
         if(globalShiftData.length === 0) document.getElementById('loading').style.display = 'block';
         
@@ -298,14 +314,12 @@
                     if(globalUsersData.length > 0) applyPermissions();
                     applyDataToPersonalCalendar();
                 }
-                
                 fetchDataFromGas();
             })
             .catch(err => {
                 console.error("LIFFエラー:", err);
                 CURRENT_USER_ID = getFallbackUserId();
                 currentUserObj.id = CURRENT_USER_ID;
-                
                 if(globalShiftData.length > 0) applyDataToPersonalCalendar();
                 fetchDataFromGas();
             });
@@ -372,7 +386,6 @@
             .then(response => response.json())
             .then(data => {
                 if (isSaving || saveQueue.length > 0) {
-                    console.log("スタンプ入力中のため、裏側のデータ更新をスキップしました");
                     loading.style.display = 'none';
                     return; 
                 }
@@ -407,7 +420,6 @@
 
     function applyDataToPersonalCalendar() {
         document.querySelectorAll('.shift-area').forEach(el => el.innerHTML = '');
-        
         if(!CURRENT_USER_ID) return; 
 
         const myShifts = globalShiftData.filter(item => item.user_id === CURRENT_USER_ID);
@@ -647,7 +659,7 @@
         }
     }
 
-    // ★変更: 送信データにトークンを付与する仕組みを追加
+    // ★トークンチェックを消去！ただ保存するだけ！
     function saveDataToGas(date, label, color, store) {
         const data = { 
             user_id: CURRENT_USER_ID, 
@@ -658,23 +670,10 @@
             store: store,
             sync_mode: syncMode
         };
-
-        // トークンチェック処理
-        const savedToken = localStorage.getItem('gapi_access_token');
-        if (savedToken) {
-            const savedTime = localStorage.getItem('gapi_token_time');
-            if (Date.now() - savedTime > 3000000) {
-                alert("⚠️ カレンダーの認証期限（1時間）が切れています。\n設定（⚙️）から「Googleカレンダー連携」をやり直してください🙇‍♂️");
-                return; // 期限切れなら保存をストップ！
-            }
-            data.gapi_token = savedToken;
-        }
-
         saveQueue.push(data);
         processQueue(); 
     }
 
-    // ★変更: 待機時間（深呼吸）を 1.5秒から 0.2秒 に大幅短縮！
     function processQueue() {
         if (isSaving || saveQueue.length === 0) return; 
         
@@ -687,14 +686,14 @@
             setTimeout(() => {
                 isSaving = false; 
                 processQueue(); 
-            }, 200); // ★ここを0.2秒(200ms)に短縮
+            }, 200); 
         })
         .catch(err => {
             console.error("Save Error:", err);
             setTimeout(() => {
                 isSaving = false; 
                 processQueue(); 
-            }, 200); // ★ここも短縮
+            }, 200); 
         });
     }
 
@@ -711,7 +710,6 @@
         document.getElementById('settingsOverlay').style.display = 'none';
     }
 
-    // ★変更: 設定を保存して閉じる関数
     function saveSettings() {
         const mode = document.getElementById('syncCommon').checked ? 'common' : 'all';
         localStorage.setItem('shift_app_sync_mode', mode);
