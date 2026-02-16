@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>シフト管理</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://accounts.google.com/gsi/client"></script>
     <style>
         :root { 
             --main-red: #ff5a5f; --bg-gray: #f8f8f8; 
@@ -218,20 +218,29 @@
     // ★ 永久ログイン（CodeFlow）の準備
     let codeClient;
 
-    window.addEventListener('load', () => {
-        codeClient = google.accounts.oauth2.initCodeClient({
-            client_id: '1064442899084-tnm7c9h1nn1heosf6uku6a7kamj1qt8b.apps.googleusercontent.com',
-            scope: 'https://www.googleapis.com/auth/calendar.events',
-            ux_mode: 'popup',
-            callback: (response) => {
-                if (response.code) {
-                    sendCodeToGas(response.code); // 裏側に暗号を送る
-                }
-            },
-        });
-    });
-
     function loginGoogle() {
+        // ボタンを押した瞬間に、確実にGoogleシステムをセットアップする
+        if (!codeClient) {
+            if (typeof google === 'undefined' || !google.accounts) {
+                alert("Googleシステムの読み込みに失敗しました。画面を一度更新（リロード）してください。");
+                return;
+            }
+            codeClient = google.accounts.oauth2.initCodeClient({
+                client_id: '1064442899084-tnm7c9h1nn1heosf6uku6a7kamj1qt8b.apps.googleusercontent.com',
+                scope: 'https://www.googleapis.com/auth/calendar.events',
+                ux_mode: 'popup',
+                callback: (response) => {
+                    if (response.code) {
+                        sendCodeToGas(response.code); // 裏側に暗号を送る
+                    }
+                },
+            });
+        }
+        codeClient.requestCode(); // ログイン画面を開く
+    }
+
+    // ★取得した暗号(Code)を裏側(GAS)に送って永久パスを発行させる
+    function sendCodeToGas(code) {
         if (!codeClient) {
             alert("システムの準備中です。数秒待ってからもう一度押してください。");
             return;
@@ -720,3 +729,4 @@
 </script>
 </body>
 </html>
+
