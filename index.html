@@ -94,13 +94,14 @@
         .btn-generate { display: block; width: 100%; padding: 12px; background: var(--main-red); color: #fff; text-align: center; border: none; border-radius: 8px; font-weight: bold; font-size: 1rem; cursor: pointer; }
         .btn-generate:active { opacity: 0.8; }
         .close-settings { position: absolute; top: 15px; right: 15px; font-size: 24px; color: #bbb; background: none; border: none; cursor: pointer; padding: 0 5px; }
+        
         #saveStatus {
-    position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
-    background: rgba(0,0,0,0.8); color: #fff; padding: 6px 15px; border-radius: 20px;
-    font-size: 0.8rem; font-weight: bold; z-index: 400; opacity: 0; pointer-events: none;
-    transition: opacity 0.3s;
-}
-.status-show { opacity: 1 !important; }
+            position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); color: #fff; padding: 6px 15px; border-radius: 20px;
+            font-size: 0.8rem; font-weight: bold; z-index: 400; opacity: 0; pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .status-show { opacity: 1 !important; }
     </style>
 </head>
 <body>
@@ -216,15 +217,13 @@
     let globalUsersData = JSON.parse(localStorage.getItem('cached_users')) || [];
     let syncMode = localStorage.getItem('shift_app_sync_mode') || 'all';
     
+    // ★ここが新しい変数です（タイマーとキュー用）
     let activeDayElement = null;
-    let activeDateString = "";
-    let globalHolidays = {};
-    
-    // ★変更：キューとタイマーの管理
-    let pendingQueue = JSON.parse(localStorage.getItem('shift_backup')) || []; 
-    let saveTimer = null;
+    let activeDateString = "";
+    let globalHolidays = {};
+    let pendingQueue = JSON.parse(localStorage.getItem('shift_backup')) || [];
+    let saveTimer = null;
 
-    // ★大改造：LINEを脱出して外部ブラウザでGoogleログイン画面を直接開く！
     function loginGoogle() {
         if (!CURRENT_USER_ID) {
             alert("ユーザー情報を取得中です。数秒待ってからもう一度押してください。");
@@ -232,14 +231,12 @@
         }
         
         const clientId = "1064442899084-tnm7c9h1nn1heosf6uku6a7kamj1qt8b.apps.googleusercontent.com";
-        const redirectUri = GAS_URL; // 戻ってくる場所（GASのURL）
+        const redirectUri = GAS_URL; 
         const scope = encodeURIComponent("https://www.googleapis.com/auth/calendar.events");
-        const state = CURRENT_USER_ID; // 誰がログインしたかの目印
+        const state = CURRENT_USER_ID; 
         
-        // Googleのログイン画面への直通URL
         const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${state}`;
         
-        // LINEの中で開いている場合は、強制的にSafariやChromeを開かせる！
         if (liff.isInClient()) {
             liff.openWindow({ url: authUrl, external: true });
         } else {
@@ -247,21 +244,21 @@
         }
     }
 
-   window.onload = function() {
-        renderAllPersonalCalendars(); 
-        if(globalShiftData.length > 0 && CURRENT_USER_ID !== "") {
-            if(globalUsersData.length > 0) applyPermissions();
-            applyDataToPersonalCalendar();
-        }
-        fetchHolidays(); 
-        initializeLiff(); 
+    window.onload = function() {
+        renderAllPersonalCalendars(); 
+        if(globalShiftData.length > 0 && CURRENT_USER_ID !== "") {
+            if(globalUsersData.length > 0) applyPermissions();
+            applyDataToPersonalCalendar();
+        }
+        fetchHolidays(); 
+        initializeLiff(); 
 
-        // ★追加：前回アプリを閉じた時の未送信データがあれば送信
-        if (pendingQueue.length > 0) {
-            showSaveStatus("🔄 前回の未保存データを送信中...", "rgba(243, 156, 18, 0.9)");
-            processBatchSave();
-        }
-    };
+        // ★アプリ起動時に未送信データがあれば送信する処理
+        if (pendingQueue.length > 0) {
+            showSaveStatus("🔄 前回の未保存データを送信中...", "rgba(243, 156, 18, 0.9)");
+            processBatchSave();
+        }
+    };
 
     function fetchHolidays() {
         fetch('https://holidays-jp.github.io/api/v1/date.json')
@@ -365,7 +362,8 @@
     }
 
     function fetchDataFromGas(forceUpdate = false) {
-        if (isSaving && !forceUpdate) return;
+        // 保存待ちのデータがある場合はGASから取得しない（上書き防止）
+        if (pendingQueue.length > 0 && !forceUpdate) return;
 
         const loading = document.getElementById('loading');
         if(globalShiftData.length === 0 || forceUpdate) loading.style.display = 'block'; 
@@ -373,7 +371,7 @@
         fetch(GAS_URL)
             .then(response => response.json())
             .then(data => {
-                if (isSaving || saveQueue.length > 0) {
+                if (pendingQueue.length > 0) {
                     loading.style.display = 'none';
                     return; 
                 }
@@ -617,78 +615,81 @@
         document.body.classList.remove('palette-open');
     }
 
+    // ★大改造：スタンプを押した時の処理（まとめ送り対応）
     function applyShift(label, color, store) {
-        if (!activeDayElement) return;
-        
-        // 1. 【即時】アプリ上のカレンダー表示を更新
-        globalShiftData = globalShiftData.filter(item => !(item.user_id === CURRENT_USER_ID && item.date === activeDateString));
-        if (label) {
-            let h = calcShiftData(label);
-            let s = label.includes('休') ? 0 : (label.includes('1621') || label.includes('1721') ? 0.5 : 1);
-            globalShiftData.push({ user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: activeDateString, shift_label: label, color: color, store: store, work_hours: h, attendance_score: s });
-        }
-        localStorage.setItem('cached_shifts', JSON.stringify(globalShiftData));
-        applyDataToPersonalCalendar(); 
+        if (!activeDayElement) return;
+        
+        // 1. 即座にアプリ上の表示を変える（サクサク動く）
+        globalShiftData = globalShiftData.filter(item => !(item.user_id === CURRENT_USER_ID && item.date === activeDateString));
+        if (label) {
+            let h = calcShiftData(label);
+            let s = label.includes('休') ? 0 : (label.includes('1621') || label.includes('1721') ? 0.5 : 1);
+            globalShiftData.push({ user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: activeDateString, shift_label: label, color: color, store: store, work_hours: h, attendance_score: s });
+        }
+        localStorage.setItem('cached_shifts', JSON.stringify(globalShiftData));
+        applyDataToPersonalCalendar(); 
 
-        // 2. 【即時】保存中ステータスを出す
-        showSaveStatus("🔄 保存中...", "rgba(0,0,0,0.8)");
+        // 2. 画面上に保存中ステータスを出す
+        showSaveStatus("🔄 保存中...", "rgba(0,0,0,0.8)");
 
-        // 3. 送信待ちキューとローカルストレージに保存
-        const newData = { user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: activeDateString, shift_label: label, color: color, store: store, sync_mode: syncMode };
-        const existingIdx = pendingQueue.findIndex(item => item.date === activeDateString);
-        if (existingIdx > -1) pendingQueue[existingIdx] = newData;
-        else pendingQueue.push(newData);
-        localStorage.setItem('shift_backup', JSON.stringify(pendingQueue));
+        // 3. データ送信待ちキューに追加＆ローカルストレージにバックアップ
+        const newData = { user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: activeDateString, shift_label: label, color: color, store: store, sync_mode: syncMode };
+        const existingIdx = pendingQueue.findIndex(item => item.date === activeDateString);
+        if (existingIdx > -1) pendingQueue[existingIdx] = newData;
+        else pendingQueue.push(newData);
+        localStorage.setItem('shift_backup', JSON.stringify(pendingQueue));
 
-        // 4. 【デバウンス】2秒間何もしなければ、GASへまとめて送信
-        clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => {
-            processBatchSave();
-        }, 2000);
+        // 4. 手が止まって2秒後に一括で送信する
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+            processBatchSave();
+        }, 2000);
 
-        // 次の日へ移動する処理
-        let nextDateObj = new Date(activeDateString);
-        nextDateObj.setDate(nextDateObj.getDate() + 1);
-        const nextIso = `${nextDateObj.getFullYear()}-${('0' + (nextDateObj.getMonth() + 1)).slice(-2)}-${('0' + nextDateObj.getDate()).slice(-2)}`;
-        const nextDayEl = document.querySelector(`.day[data-date="${nextIso}"]`);
-        if (nextDayEl) {
-            const dayOfWeek = ["日","月","火","水","木","金","土"][nextDateObj.getDay()];
-            const y = nextDateObj.getFullYear(); const m = nextDateObj.getMonth() + 1; const d = nextDateObj.getDate();
-            nextDayEl.closest('.calendar-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            openPalette(nextDayEl, `${y} / ${m} / ${d} (${dayOfWeek})`, nextIso);
-        } else closePalette();
-    }
+        // 次の日へ自動移動
+        let nextDateObj = new Date(activeDateString);
+        nextDateObj.setDate(nextDateObj.getDate() + 1);
+        const nextIso = `${nextDateObj.getFullYear()}-${('0' + (nextDateObj.getMonth() + 1)).slice(-2)}-${('0' + nextDateObj.getDate()).slice(-2)}`;
+        const nextDayEl = document.querySelector(`.day[data-date="${nextIso}"]`);
+        if (nextDayEl) {
+            const dayOfWeek = ["日","月","火","水","木","金","土"][nextDateObj.getDay()];
+            const y = nextDateObj.getFullYear(); const m = nextDateObj.getMonth() + 1; const d = nextDateObj.getDate();
+            nextDayEl.closest('.calendar-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            openPalette(nextDayEl, `${y} / ${m} / ${d} (${dayOfWeek})`, nextIso);
+        } else closePalette();
+    }
 
-    function processBatchSave() {
-        if (pendingQueue.length === 0) return;
-        const dataToSend = [...pendingQueue];
+    // ★大改造：GASへ一括送信する処理
+    function processBatchSave() {
+        if (pendingQueue.length === 0) return;
+        const dataToSend = [...pendingQueue];
 
-        fetch(GAS_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({ type: 'BATCH_SAVE', payload: dataToSend })
-        }).then(() => {
-            // 送信完了（裏でGASが処理開始）
-            showSaveStatus("✅ 保存完了", "rgba(42, 157, 143, 0.9)", true);
-            pendingQueue = pendingQueue.filter(p => !dataToSend.includes(p));
-            localStorage.setItem('shift_backup', JSON.stringify(pendingQueue));
-        }).catch(err => {
-            showSaveStatus("❌ 通信エラー（再試行します）", "rgba(231, 76, 60, 0.9)", true);
-        });
-    }
+        fetch(GAS_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ type: 'BATCH_SAVE', payload: dataToSend })
+        }).then(() => {
+            showSaveStatus("✅ 保存完了", "rgba(42, 157, 143, 0.9)", true);
+            // 送信完了した分をキューから消去
+            pendingQueue = pendingQueue.filter(p => !dataToSend.includes(p));
+            localStorage.setItem('shift_backup', JSON.stringify(pendingQueue));
+        }).catch(err => {
+            showSaveStatus("❌ 通信エラー（再試行します）", "rgba(231, 76, 60, 0.9)", true);
+        });
+    }
 
-    function showSaveStatus(text, bg, autoHide = false) {
-        const statusEl = document.getElementById('saveStatus');
-        statusEl.innerText = text;
-        statusEl.style.background = bg;
-        statusEl.classList.add('status-show');
-        if (autoHide) {
-            setTimeout(() => {
-                if (pendingQueue.length === 0) statusEl.classList.remove('status-show');
-            }, 2000);
-        }
-    }
+    // ★追加：ステータス表示用関数
+    function showSaveStatus(text, bg, autoHide = false) {
+        const statusEl = document.getElementById('saveStatus');
+        statusEl.innerText = text;
+        statusEl.style.background = bg;
+        statusEl.classList.add('status-show');
+        if (autoHide) {
+            setTimeout(() => {
+                if (pendingQueue.length === 0) statusEl.classList.remove('status-show');
+            }, 2000);
+        }
+    }
 
     function openSettings() {
         if (syncMode === 'common') {
@@ -713,9 +714,3 @@
 </script>
 </body>
 </html>
-
-
-
-
-
-
