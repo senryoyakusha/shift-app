@@ -643,7 +643,7 @@
         clearTimeout(saveTimer);
         saveTimer = setTimeout(() => {
             processBatchSave();
-        }, 2000);
+        }, 800);
 
         // 次の日へ自動移動
         let nextDateObj = new Date(activeDateString);
@@ -714,3 +714,4 @@
 </script>
 </body>
 </html>
+
