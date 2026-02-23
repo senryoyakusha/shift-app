@@ -619,10 +619,10 @@
         if (!activeDayElement) return;
         
         // 1. 即座にアプリ上の表示を変える（サクサク動く）
-        globalShiftData = globalShiftData.filter(item => !(item.user_id === CURRENT_USER_ID && item.date === activeDateString));
-        if (label) {
-            let h = calcShiftData(label);
-            let s = label.includes('休') ? 0 : (label.includes('1621') || label.includes('1721') ? 0.5 : 1);
+globalShiftData = globalShiftData.filter(item => !(item.user_id === CURRENT_USER_ID && item.date === activeDateString));
+if (label) {
+    let h = calcShiftData(label);
+    let s = (label.includes('休') || label.includes('作業日')) ? 0 : (label.includes('1621') || label.includes('1721') ? 0.5 : 1); // ★ココを差し替え！
             globalShiftData.push({ user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: activeDateString, shift_label: label, color: color, store: store, work_hours: h, attendance_score: s });
         }
         localStorage.setItem('cached_shifts', JSON.stringify(globalShiftData));
@@ -713,6 +713,7 @@
 </script>
 </body>
 </html>
+
 
 
 
