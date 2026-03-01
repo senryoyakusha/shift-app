@@ -425,11 +425,16 @@
                 const shifts = Array.isArray(data) ? data : (data.shifts || []);
                 globalUsersData = data.users || [];
                 
-                // 一旦すべての日付フォーマットを整える
-                let tempShifts = shifts.map(item => {
-                    if (item.date && item.date.includes('T')) item.date = item.date.split('T')[0];
-                    return item;
-                });
+               // 一旦すべての日付フォーマットを整える
+let tempShifts = shifts.map(item => {
+    if (item.date) {
+        // T以降（時間）をカット
+        if (item.date.includes('T')) item.date = item.date.split('T')[0];
+        // ★重要：スラッシュをハイフンに強制変換する
+        item.date = String(item.date).replace(/\//g, '-');
+    }
+    return item;
+});
                 
                 // ★追加：過去のエラーで増殖した「重複データ」を最新1件に絞り込む（計算バグの防止）
                 const uniqueShifts = new Map();
@@ -968,6 +973,7 @@
 </script>
 </body>
 </html>
+
 
 
 
