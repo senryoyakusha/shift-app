@@ -462,29 +462,88 @@
         return 0;
     }
 
-    function applyDataToPersonalCalendar() {
-        document.querySelectorAll('.shift-area').forEach(el => el.innerHTML = '');
-        if(!CURRENT_USER_ID) return; 
-
-        const myShifts = globalShiftData.filter(item => item.user_id === CURRENT_USER_ID);
-        const monthlyHours = {};
-
-        myShifts.forEach(shift => {
-            const targetDiv = document.querySelector(`.day[data-date="${shift.date}"] .shift-area`);
-            if (targetDiv) {
-                let displayLabel = shift.shift_label;
-                displayLabel = displayLabel.replace(/^(annee|yoki\.)(\d{4})$/, "$1<br>$2");
-                targetDiv.innerHTML = `<span class="shift-badge" style="background:${shift.color}">${displayLabel}</span>`;
+    function applyShift(label, color, store) {
+        if (!activeDayElement) return;
+        
+        globalShiftData = globalShiftData.filter(item => !(item.user_id === CURRENT_USER_ID && item.date === activeDateString));
+        if (label) {
+            let h = calcShiftData(label);
+            // ★修正：休・作業日などは0。5時間以下なら0.5。それより長ければ1
+            let s = 1;
+            if (label.includes('休') || label.includes('作業日')) {
+                s = 0;
+            } else if (h > 0 && h <= 5) {
+                s = 0.5;
             }
-            const monthKey = shift.date.substring(0, 7);
-            const hours = Number(shift.work_hours) || calcShiftData(shift.shift_label);
-            monthlyHours[monthKey] = (monthlyHours[monthKey] || 0) + hours;
-        });
-
-        for (let key in monthlyHours) {
-            const totalSpan = document.getElementById(`total-${key}`);
-            if (totalSpan) totalSpan.innerText = `合計: ${monthlyHours[key]}時間`;
+            
+            globalShiftData.push({ user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: activeDateString, shift_label: label, color: color, store: store, work_hours: h, attendance_score: s });
         }
+        localStorage.setItem('cached_shifts', JSON.stringify(globalShiftData));
+        applyDataToPersonalCalendar(); 
+
+        showSaveStatus("🔄 保存中...", "rgba(0,0,0,0.8)");
+
+        const newData = { user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: activeDateString, shift_label: label, color: color, store: store, sync_mode: syncMode };
+        const existingIdx = pendingQueue.findIndex(item => item.date === activeDateString);
+        if (existingIdx > -1) pendingQueue[existingIdx] = newData;
+        else pendingQueue.push(newData);
+        localStorage.setItem('shift_backup', JSON.stringify(pendingQueue));
+
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+            processBatchSave();
+        }, 800);
+
+        let nextDateObj = new Date(activeDateString);
+        nextDateObj.setDate(nextDateObj.getDate() + 1);
+        const nextIso = `${nextDateObj.getFullYear()}-${('0' + (nextDateObj.getMonth() + 1)).slice(-2)}-${('0' + nextDateObj.getDate()).slice(-2)}`;
+        const nextDayEl = document.querySelector(`.day[data-date="${nextIso}"]`);
+        if (nextDayEl) {
+            const dayOfWeek = ["日","月","火","水","木","金","土"][nextDateObj.getDay()];
+            const y = nextDateObj.getFullYear(); const m = nextDateObj.getMonth() + 1; const d = nextDateObj.getDate();
+            nextDayEl.closest('.calendar-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            openPalette(nextDayEl, `${y} / ${m} / ${d} (${dayOfWeek})`, nextIso);
+        } else closePalette();
+    }
+
+    function createCustomStamp() {
+      let label = prompt("出勤と退勤時間を4桁の数字で入力してください\n（例：1117）");
+      if (!label) return; 
+
+      // ★修正：3桁で入力されたら頭に0をつける優しさ
+      if (label.length === 3) label = '0' + label;
+
+      const match = label.match(/^(\d{2})(\d{2})$/);
+      if (!match) {
+        alert("4桁の数字で入力してください（例：1117）");
+        return;
+      }
+
+      const h = parseInt(match[2], 10) - parseInt(match[1], 10);
+      if (h <= 0) {
+        alert("正しい時間を入力してください");
+        return;
+      }
+
+      let colorVar = '';
+      let storePrefix = currentStore === 'annee' ? 'annee' : 'yoki.';
+
+      if (h >= 5.5) {
+        colorVar = currentStore === 'annee' ? 'var(--annee-g1, #e74c3c)' : 'var(--yoki-g1, #2980b9)';
+      } else {
+        colorVar = currentStore === 'annee' ? 'var(--annee-g2, #f5b7b1)' : 'var(--yoki-g2, #aed6f1)';
+      }
+
+      const finalLabel = storePrefix + label;
+      
+      const stampData = { label: finalLabel, color: colorVar, store: currentStore, text: `${storePrefix}<br>${label}` };
+      if (!myCustomStamps.some(s => s.label === finalLabel)) {
+          myCustomStamps.push(stampData);
+          localStorage.setItem('my_custom_stamps', JSON.stringify(myCustomStamps));
+      }
+
+      applyShift(finalLabel, colorVar, currentStore);
+      closePalette();
     }
 
     function renderSharedCalendars() {
@@ -856,9 +915,60 @@
             fetchDataFromGas(true);
         }
     }
+
+    let isSaving = false; // ★連打防止用の鍵
+
+    function syncAndFetch() {
+        if (pendingQueue.length > 0) {
+            showSaveStatus("🔄 送信中...", "rgba(243, 156, 18, 0.9)");
+            processBatchSave(true); // 保存が終わるまで待つ設定
+        } else {
+            fetchDataFromGas(true);
+        }
+    }
+
+    function processBatchSave(fetchAfter = false) {
+      if (pendingQueue.length === 0) {
+          if (fetchAfter) fetchDataFromGas(true);
+          return;
+      }
+      if (isSaving) return; // ★連打されたら無視する
+      isSaving = true;
+      const dataToSend = [...pendingQueue];
+
+      fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ type: 'BATCH_SAVE', payload: dataToSend })
+      })
+      .then(response => {
+        if (!response.ok) throw new Error("Network Error");
+        return response.text();
+      })
+      .then(text => {
+        isSaving = false;
+        if (text === "Success" || text.includes("Success")) {
+          showSaveStatus("✅ 保存完了", "rgba(42, 157, 143, 0.9)", true);
+          pendingQueue = pendingQueue.filter(p => !dataToSend.includes(p));
+          localStorage.setItem('shift_backup', JSON.stringify(pendingQueue));
+          if (fetchAfter) fetchDataFromGas(true); // ★保存が確実に成功してから画面を更新する
+        } else if (text.includes("Busy")) {
+          // ★GAS側が混雑している場合は、専用のメッセージを出す
+          showSaveStatus("⏳ 混雑中。数秒待ってから押してください", "rgba(243, 156, 18, 0.9)", false);
+        } else {
+          throw new Error("GAS Error");
+        }
+      })
+      .catch(err => {
+        isSaving = false;
+        console.error("Save Error:", err);
+        showSaveStatus("❌ 更新ボタンを押してください", "rgba(231, 76, 60, 0.9)", false);
+      });
+    }
 </script>
 </body>
 </html>
+
 
 
 
