@@ -15,6 +15,9 @@
         }
         body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; background: var(--bg-gray); color: #333; overflow-x: hidden; padding-bottom: 70px; }
         
+        /* 共有カレンダーを開いた時に全体のスクロールを止めるためのクラス */
+        body.noscroll { overflow: hidden; }
+
         header { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .month-nav { color: var(--main-red); font-weight: bold; font-size: 1.2rem; }
         .header-icons { display: flex; gap: 15px; font-size: 1.4rem; color: var(--main-red); align-items: center; }
@@ -29,15 +32,46 @@
         #calendarApp { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
         .calendar-section { flex: 0 0 100%; width: 100%; background: #fff; scroll-snap-align: start; box-sizing: border-box; }
         
-        #sharedCalendarApp { display: block; }
-        .shared-section { width: 100%; background: #fff; box-sizing: border-box; margin-bottom: 20px; }
+        /* ★修正：共有カレンダー全体を独立したスクロール枠にする */
+        #sharedView {
+            height: calc(100dvh - 165px); /* ヘッダー・タブ・ボトムナビの分を引いた高さ */
+            overflow: auto; /* この枠の中で縦横にスクロールさせる */
+            background: #fff;
+        }
+
+        .shared-section { width: max-content; min-width: 100%; }
         
-        .month-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; border-bottom: 1px solid #eee; }
+        /* 古い横スクロール設定を解除 */
+        .table-wrap { overflow: visible; }
+        .shared-table { border-collapse: collapse; width: 100%; min-width: 400px; font-size: 0.8rem; }
+        .shared-table th, .shared-table td { border: 1px solid #eee; text-align: center; padding: 4px 2px; vertical-align: middle; }
+        
+        /* ★修正：共有カレンダーのトリプル固定（完璧版） */
+        .month-header { 
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 10px 15px; border-bottom: 1px solid #eee;
+            position: sticky; top: 0; left: 0; width: 100vw; z-index: 30; background: #fff; box-sizing: border-box; height: 41px;
+        }
         .month-title { font-weight: bold; color: #666; font-size: 1.1rem; }
         .month-total { font-size: 0.85rem; color: var(--main-red); font-weight: bold; background: #ffeeee; padding: 4px 10px; border-radius: 12px; }
 
+        .shared-table th { 
+            position: sticky; top: 41px; /* 月ヘッダーの高さ分だけ下に固定 */
+            z-index: 25; background: #f4f4f4; box-shadow: 0 1px 2px rgba(0,0,0,0.1); color: #555;
+        }
+        .shared-table .date-col { 
+            width: 45px; background: #fafafa; font-weight: bold; 
+            position: sticky; left: 0; z-index: 20; box-shadow: 1px 0 2px rgba(0,0,0,0.05);
+        }
+        .shared-table th.date-col { z-index: 35; } /* 左上のカドは最前面 */
+
+        .shared-table .sun { color: #ff5a5f; } .shared-table .sat { color: #007aff; }
+        .row-short { background-color: #ebf5ff !important; }
+        .row-over { background-color: #ffebeb !important; }
+        .total-row { background-color: #fff9e6 !important; font-weight: bold; color: #d97706; }
+        .total-row .date-col { background-color: #fff9e6 !important; color: #d97706; }
+
         .grid { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid #eee; }
-        
         .day-header { text-align: center; font-size: 0.7rem; font-weight: bold; padding: 6px 0; background: #fff; border-bottom: 1px solid #eee; border-right: 1px solid #eee; color: #666; }
         .day-header:nth-child(7n) { border-right: none; }
         .day-header.sun { color: #ff5a5f; }
@@ -52,18 +86,6 @@
         .day:active, .day.active-focus { background: #ffebeb !important; }
 
         .shift-badge { display: block; margin-top: 2px; padding: 4px 2px; border-radius: 4px; color: #fff; font-size: 0.65rem; font-weight: bold; line-height: 1.2; text-align: center; word-break: break-word; }
-
-        .table-wrap { overflow-x: auto; }
-        .shared-table { border-collapse: collapse; width: 100%; min-width: 400px; font-size: 0.8rem; }
-        .shared-table th, .shared-table td { border: 1px solid #eee; text-align: center; padding: 4px 2px; vertical-align: middle; }
-        .shared-table th { background: #f4f4f4; position: sticky; top: 0; z-index: 10; color: #555; }
-        .shared-table .date-col { width: 45px; background: #fafafa; font-weight: bold; position: sticky; left: 0; z-index: 5; }
-        .shared-table th.date-col { z-index: 15; }
-        .shared-table .sun { color: #ff5a5f; } .shared-table .sat { color: #007aff; }
-        .row-short { background-color: #ebf5ff !important; }
-        .row-over { background-color: #ffebeb !important; }
-        .total-row { background-color: #fff9e6 !important; font-weight: bold; color: #d97706; }
-        .total-row .date-col { background-color: #fff9e6 !important; color: #d97706; }
 
         #paletteOverlay { display: none; position: fixed; bottom: 70px; left: 0; width: 100%; height: 38vh; background: #fff; z-index: 100; box-shadow: 0 -5px 15px rgba(0,0,0,0.1); border-radius: 15px 15px 0 0; }
         .palette-content { height: 100%; padding: 10px 10px 15px; box-sizing: border-box; overflow-y: auto; }
@@ -102,20 +124,13 @@
             transition: opacity 0.3s;
         }
         .status-show { opacity: 1 !important; }
-
-        /* ★追加・上書き：共有カレンダーのトリプル固定 */
-        .shared-section { position: relative; }
-        .month-header { position: sticky; top: 95px; z-index: 30; background: #fff; }
-        .shared-table th { position: sticky; top: 135px; z-index: 25; background: #f4f4f4; }
-        .shared-table .date-col { position: sticky; left: 0; z-index: 26; background: #fafafa; }
-        .shared-table th.date-col { z-index: 35; }
     </style>
 </head>
 <body>
 <div id="saveStatus">🔄 保存中...</div>
 <header>
     <div style="font-weight:bold;">
-        <img src="logo.png" alt="Logo" style="height: 80px; object-fit: contain; vertical-align: middle;">
+        <span style="font-size:1.2rem; color:#666;">SHIFT APP</span>
     </div>
     <div class="month-nav">2026</div>
     <div class="header-icons">
@@ -225,12 +240,13 @@
     let globalUsersData = JSON.parse(localStorage.getItem('cached_users')) || [];
     let syncMode = localStorage.getItem('shift_app_sync_mode') || 'all';
     
-    // 変数（タイマーとキュー用）
+    // 変数（タイマー、キュー、マイスタンプ用）
     let activeDayElement = null;
     let activeDateString = "";
     let globalHolidays = {};
     let pendingQueue = JSON.parse(localStorage.getItem('shift_backup')) || [];
     let saveTimer = null;
+    let myCustomStamps = JSON.parse(localStorage.getItem('my_custom_stamps')) || [];
 
     function loginGoogle() {
         if (!CURRENT_USER_ID) {
@@ -345,15 +361,24 @@
         switchStore(currentStore);
     }
 
+    // ★修正：共有ビューを開いた時にbodyのスクロールを止める
     function switchView(viewName) {
         currentView = viewName;
         document.getElementById('personalView').style.display = (viewName === 'personal') ? 'block' : 'none';
         document.getElementById('sharedView').style.display = (viewName === 'shared') ? 'block' : 'none';
+        
         if (viewName === 'shared' && (document.getElementById('tab-annee').style.display === 'block' || document.getElementById('tab-yoki').style.display === 'block')) {
             document.getElementById('storeTabs').style.display = 'flex';
         } else {
             document.getElementById('storeTabs').style.display = 'none';
         }
+
+        if (viewName === 'shared') {
+            document.body.classList.add('noscroll');
+        } else {
+            document.body.classList.remove('noscroll');
+        }
+
         document.getElementById('navPersonal').className = (viewName === 'personal') ? 'nav-item active' : 'nav-item';
         document.getElementById('navShared').className = (viewName === 'shared') ? 'nav-item active' : 'nav-item';
         closePalette(); 
@@ -368,7 +393,6 @@
         if (currentView === 'shared') renderSharedCalendars();
     }
 
-    // ★追加：未送信リトライ用の関数
     function syncAndFetch() {
         if (pendingQueue.length > 0) {
             showSaveStatus("🔄 未送信データを送信中...", "rgba(243, 156, 18, 0.9)");
@@ -605,6 +629,30 @@
         section.appendChild(grid); container.appendChild(section);
     }
 
+    // ★追加：保存されたマイスタンプをパレットに描画する関数
+    function renderMyStamps() {
+        ['annee', 'yoki.'].forEach(store => {
+            const storeId = store === 'annee' ? 'palette-group-annee' : 'palette-group-yoki';
+            const grid = document.querySelector(`#${storeId} .stamp-grid`);
+            if (!grid) return;
+
+            // 一旦、前回のマイスタンプを画面から消す
+            grid.querySelectorAll('.my-stamp').forEach(btn => btn.remove());
+
+            // 追加ボタン（＋）の手前にマイスタンプを差し込む
+            const addBtn = grid.querySelector('.s-del'); 
+            
+            myCustomStamps.filter(s => s.store === store).forEach(stamp => {
+                const btn = document.createElement('button');
+                btn.className = 'stamp my-stamp';
+                btn.style.background = stamp.color;
+                btn.innerHTML = stamp.text;
+                btn.onclick = () => applyShift(stamp.label, stamp.color, stamp.store);
+                grid.insertBefore(btn, addBtn);
+            });
+        });
+    }
+
     function openPalette(el, dateText, dateIso) {
         if(activeDayElement) activeDayElement.classList.remove('active-focus');
         activeDayElement = el; activeDateString = dateIso; 
@@ -613,6 +661,9 @@
         
         document.getElementById('palette-group-annee').style.display = currentUserObj.stores.includes('annee') ? 'block' : 'none';
         document.getElementById('palette-group-yoki').style.display = currentUserObj.stores.includes('yoki.') ? 'block' : 'none';
+
+        // パレットを開くたびにマイスタンプを反映
+        renderMyStamps();
 
         document.getElementById('paletteOverlay').style.display = 'block';
         document.body.classList.add('palette-open'); 
@@ -668,7 +719,6 @@
         } else closePalette();
     }
 
-    // ★大改造：GASへ一括送信する処理（ハイブリッド型オートセーブ）
     function processBatchSave() {
       if (pendingQueue.length === 0) return;
       const dataToSend = [...pendingQueue];
@@ -709,10 +759,10 @@
         }
     }
 
-    // ★追加：カスタムスタンプを作成・適用する関数
+    // ★大改造：カスタムスタンプを作成・適用・保存する関数
     function createCustomStamp() {
       const label = prompt("出勤と退勤時間を4桁の数字で入力してください\n（例：1117）");
-      if (!label) return; // キャンセル時
+      if (!label) return; 
 
       const match = label.match(/^(\d{2})(\d{2})$/);
       if (!match) {
@@ -736,6 +786,14 @@
       }
 
       const finalLabel = storePrefix + label;
+      
+      // マイスタンプとしてローカルストレージに保存
+      const stampData = { label: finalLabel, color: colorVar, store: currentStore, text: `${storePrefix}<br>${label}` };
+      if (!myCustomStamps.some(s => s.label === finalLabel)) {
+          myCustomStamps.push(stampData);
+          localStorage.setItem('my_custom_stamps', JSON.stringify(myCustomStamps));
+      }
+
       applyShift(finalLabel, colorVar, currentStore);
       closePalette();
     }
