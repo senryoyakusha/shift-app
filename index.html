@@ -419,10 +419,23 @@
 
                 const shifts = Array.isArray(data) ? data : (data.shifts || []);
                 globalUsersData = data.users || [];
-                globalShiftData = shifts.map(item => {
+                
+                // 一旦すべての日付フォーマットを整える
+                let tempShifts = shifts.map(item => {
                     if (item.date && item.date.includes('T')) item.date = item.date.split('T')[0];
                     return item;
                 });
+                
+                // ★追加：過去のエラーで増殖した「重複データ」を最新1件に絞り込む（計算バグの防止）
+                const uniqueShifts = new Map();
+                tempShifts.forEach(item => {
+                    // ユーザーIDと日付を組み合わせたキーを作成（例：U1234..._2026-03-01）
+                    const key = item.user_id + '_' + item.date;
+                    // 同じキーがあれば上書きされるため、必ず「一番新しいデータ」だけが残る
+                    uniqueShifts.set(key, item);
+                });
+                // ダブりを消した綺麗なデータを globalShiftData にセット
+                globalShiftData = Array.from(uniqueShifts.values());
                 
                 localStorage.setItem('cached_shifts', JSON.stringify(globalShiftData));
                 localStorage.setItem('cached_users', JSON.stringify(globalUsersData));
@@ -434,7 +447,6 @@
             })
             .catch(err => { console.error(err); loading.style.display = 'none'; });
     }
-
     function calcShiftData(label) {
         let match = label.match(/(\d{2})(\d{2})/);
         if (match) {
@@ -821,4 +833,5 @@
 </script>
 </body>
 </html>
+
 
