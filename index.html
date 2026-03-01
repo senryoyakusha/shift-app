@@ -218,13 +218,18 @@
             Googleカレンダーを連携する
         </button>
 
+        
         <div class="settings-radio">
             <label><input type="radio" name="sync_mode" value="all" id="syncAll"> すべてのシフトを連携する</label>
             <label><input type="radio" name="sync_mode" value="common" id="syncCommon"> 休み・作業日など共通のみ連携</label>
         </div>
+        
+        <button class="btn-generate" onclick="resetCustomStamps()" style="background:#999; margin-bottom:10px;">🗑 マイスタンプをリセット</button>
+        <button class="btn-generate" onclick="clearPendingQueue()" style="background:#e74c3c; margin-bottom:15px;">⚠️ 通信エラーの詰まりを強制リセット</button>
         <button class="btn-generate" onclick="saveSettings()">設定を閉じる</button>
     </div>
 </div>
+       
 
 <script>
     const LIFF_ID = "2009130838-xQhedkHz";
@@ -830,8 +835,30 @@
         alert('設定を保存しました！');
         closeSettings();
     }
+
+    // ★追加1：マイスタンプのリセット
+    function resetCustomStamps() {
+        if(confirm("作成したマイスタンプをすべてパレットから消去しますか？")) {
+            myCustomStamps = [];
+            localStorage.removeItem('my_custom_stamps');
+            renderMyStamps();
+            alert("マイスタンプをリセットしました！");
+        }
+    }
+
+    // ★追加2：スマホ内の未送信データ（幽霊データ）の強制クリア
+    function clearPendingQueue() {
+        if(confirm("※注意※\n現在スマホ内に溜まっている「未送信のシフトデータ」をすべて破棄します。\nよろしいですか？")) {
+            pendingQueue = [];
+            localStorage.removeItem('shift_backup');
+            document.getElementById('saveStatus').classList.remove('status-show');
+            alert("未送信データを強制リセットしました！\n画面を最新状態に更新します。");
+            fetchDataFromGas(true);
+        }
+    }
 </script>
 </body>
 </html>
+
 
 
