@@ -469,8 +469,17 @@
     function createSharedTable(year, month, targetUsers, container) {
         const section = document.createElement('div'); section.className = 'shared-section';
         const title = document.createElement('div'); title.className = 'month-header';
-        title.innerHTML = `<span class="month-title">${year} / ${month}</span>`;
+        
+        // ★ 変更点1：代表かコアメンバーの場合のみ「店舗合計」のバッジ用HTMLを用意する
+        let totalBadgeHtml = "";
+        const isSpecialUser = currentUserObj.is_boss || currentUserObj.is_core;
+        if (isSpecialUser) {
+            totalBadgeHtml = `<span class="month-total" id="shared-total-${year}-${month}">店舗合計: 0時間</span>`;
+        }
+        
+        title.innerHTML = `<span class="month-title">${year} / ${month}</span>${totalBadgeHtml}`;
         section.appendChild(title);
+        
         const tableWrap = document.createElement('div'); tableWrap.className = 'table-wrap';
         const table = document.createElement('table'); table.className = 'shared-table';
         let headerRow = `<tr><th class="date-col">日付</th>`;
@@ -480,6 +489,7 @@
         const daysInMonth = new Date(year, month, 0).getDate();
         const weekChars = ["日","月","火","水","木","金","土"];
         const monthPrefix = `${year}-${('0' + month).slice(-2)}`;
+        
         for (let d = 1; d <= daysInMonth; d++) {
             const dateObj = new Date(year, month - 1, d);
             const dayOfWeek = dateObj.getDay();
@@ -487,6 +497,7 @@
             const isoDate = `${y}-${m}-${da}`;
             const tr = document.createElement('tr');
             let rowHtml = ""; let hourlyCounts = new Array(24).fill(0);
+            
             targetUsers.forEach(u => {
                 const shift = globalShiftData.find(item => item.user_id === u.id && item.date === isoDate && (item.store === currentStore || item.store === 'common'));
                 let cellHtml = "<td></td>";
@@ -509,7 +520,6 @@
             tr.innerHTML = `<td class="${dateClass} ${rowClass}">${m}/${da} <span style="font-size:0.7em">(${weekChars[dayOfWeek]})</span></td>` + rowHtml;
             tbody.appendChild(tr);
         }
-        // ======= ここから下が変更部分です =======
 
         const trTotal = document.createElement('tr'); trTotal.className = 'total-row';
         const trAdjust = document.createElement('tr'); trAdjust.className = 'total-row';
@@ -519,30 +529,22 @@
         let adjustHtml = `<td class="date-col" style="font-size:0.65rem;">調整休</td>`;
         let daysHtml = `<td class="date-col" style="font-size:0.65rem;">出勤<br>日数</td>`;
 
+        let grandTotalHrs = 0; // ★ 変更点2：店舗全員の合計時間をいれる箱
+
         targetUsers.forEach(u => {
             let userTotalHrs = 0;
             let adjustCount = 0;
             let totalDays = 0;
 
             globalShiftData.forEach(shift => {
-                // そのユーザーの、その月のデータだけを計算の対象にする
                 if (shift.user_id === u.id && shift.date.startsWith(monthPrefix)) {
-                    
-                    // ① 調整休みのカウント（店舗問わずカウント）
                     if (shift.shift_label === '調整休み') {
                         adjustCount++;
                     }
-                    
-                    // 現在のタブの店舗 or 共通シフトの場合のみ、時間と日数を計算する
                     if (shift.store === currentStore || shift.store === 'common') {
-                        
-                        // ② 合計時間の合算
                         userTotalHrs += Number(shift.work_hours) || 0;
-                        
-                        // ③ 勤務日数の合算（アテンダンススコア）
                         let score = Number(shift.attendance_score);
                         if (isNaN(score)) {
-                            // もしスコアが取得できなかった場合の予備計算
                             let h = Number(shift.work_hours) || 0;
                             if (h >= 5.5) score = 1;
                             else if (h > 0 && h <= 5) score = 0.5;
@@ -553,11 +555,18 @@
                 }
             });
 
-            // それぞれの行にHTMLを追加
+            grandTotalHrs += userTotalHrs; // ★ 変更点3：各ユーザーの合計時間を店舗合計に足す
+
             totalHtml += `<td>${userTotalHrs}h</td>`;
             adjustHtml += `<td>${adjustCount > 0 ? adjustCount + '日' : '0'}</td>`;
             daysHtml += `<td>${totalDays > 0 ? totalDays + '日' : '0'}</td>`;
         });
+        
+        // ★ 変更点4：権限がある場合のみ、ヘッダーのバッジの数字を書き換える
+        if (isSpecialUser) {
+            const totalSpan = title.querySelector(`#shared-total-${year}-${month}`);
+            if (totalSpan) totalSpan.innerText = `店舗合計: ${grandTotalHrs}時間`;
+        }
 
         trTotal.innerHTML = totalHtml; tbody.appendChild(trTotal);
         trAdjust.innerHTML = adjustHtml; tbody.appendChild(trAdjust);
@@ -749,5 +758,6 @@
 </script>
 </body>
 </html>
+
 
 
