@@ -569,6 +569,16 @@
         container.appendChild(section);
     }
 
+    function renderAllPersonalCalendars() {
+        const container = document.getElementById('calendarApp');
+        container.innerHTML = ""; 
+        const now = new Date();
+        for (let i = 0; i < 5; i++) {
+            const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+            renderCalendar(d.getFullYear(), d.getMonth() + 1, container);
+        }
+    }
+
     function renderCalendar(year, month, container) {
         const section = document.createElement('div'); section.className = 'calendar-section';
         const monthKey = `${year}-${('0' + month).slice(-2)}`;
@@ -739,4 +749,5 @@
 </script>
 </body>
 </html>
+
 
