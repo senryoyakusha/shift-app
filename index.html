@@ -713,23 +713,62 @@
     }
 
     function createCustomStamp() {
-      let label = prompt("出勤と退勤時間を4桁の数字で入力してください\n（例：1117）");
-      if (!label) return; 
-      if (label.length === 3) label = '0' + label;
-      const match = label.match(/^(\d{2})(\d{2})$/);
-      if (!match) { alert("4桁の数字で入力してください（例：1117）"); return; }
-      const h = parseInt(match[2], 10) - parseInt(match[1], 10);
-      if (h <= 0) { alert("正しい時間を入力してください"); return; }
-      let colorVar = (h >= 5.5) ? (currentStore === 'annee' ? 'var(--annee-g1)' : 'var(--yoki-g1)') : (currentStore === 'annee' ? 'var(--annee-g2)' : 'var(--yoki-g2)');
-      let storePrefix = currentStore === 'annee' ? 'annee' : 'yoki.';
-      const finalLabel = storePrefix + label;
-      const stampData = { label: finalLabel, color: colorVar, store: currentStore, text: `${storePrefix}<br>${label}` };
-      if (!myCustomStamps.some(s => s.label === finalLabel)) {
-          myCustomStamps.push(stampData);
-          localStorage.setItem('my_custom_stamps', JSON.stringify(myCustomStamps));
-      }
-      applyShift(finalLabel, colorVar, currentStore); closePalette();
-    }
+  // ① 権限チェック：コアメンバー・代表、または複数店舗に所属しているか
+  const isSpecial = currentUserObj.is_boss || currentUserObj.is_core || currentUserObj.stores.length > 1;
+  if (!isSpecial) {
+    alert("マイスタンプの作成は、複数店舗を管理するメンバー専用の機能です。");
+    return;
+  }
+
+  // ② 時間の入力
+  let label = prompt("出勤と退勤時間を4桁の数字で入力してください\n（例：1117）");
+  if (!label) return;
+  if (label.length === 3) label = '0' + label;
+
+  const match = label.match(/^(\d{2})(\d{2})$/);
+  if (!match) { 
+    alert("4桁の数字で入力してください（例：1117）"); 
+    return; 
+  }
+
+  const h = parseInt(match[2], 10) - parseInt(match[1], 10);
+  if (h <= 0) { 
+    alert("正しい時間を入力してください"); 
+    return; 
+  }
+
+  // ③ 店舗の選択
+  let targetStore = prompt("どちらの店舗のスタンプを作成しますか？\n「1」: annee\n「2」: yoki.\n半角数字で入力してください", "1");
+  if (targetStore !== "1" && targetStore !== "2") {
+    alert("作成をキャンセルしました。");
+    return;
+  }
+  let selectedStore = (targetStore === "1") ? 'annee' : 'yoki.';
+
+  // ④ 色とラベルの生成
+  let colorVar = (h >= 5.5) ? 
+    (selectedStore === 'annee' ? 'var(--annee-g1)' : 'var(--yoki-g1)') : 
+    (selectedStore === 'annee' ? 'var(--annee-g2)' : 'var(--yoki-g2)');
+  let storePrefix = selectedStore === 'annee' ? 'annee' : 'yoki.';
+  const finalLabel = storePrefix + label;
+
+  // ⑤ スタンプの保存
+  const stampData = { 
+    label: finalLabel, 
+    color: colorVar, 
+    store: selectedStore, 
+    text: `${storePrefix}<br>${label}` 
+  };
+
+  if (!myCustomStamps.some(s => s.label === finalLabel)) {
+    myCustomStamps.push(stampData);
+    localStorage.setItem('my_custom_stamps', JSON.stringify(myCustomStamps));
+  }
+
+  applyShift(finalLabel, colorVar, selectedStore); 
+  closePalette();
+  renderMyStamps(); // パレットの表示を即時更新
+}
 
     function openSettings() {
         if (syncMode === 'common') document.getElementById('syncCommon').checked = true;
