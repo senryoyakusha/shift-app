@@ -514,7 +514,16 @@
                 rowHtml += cellHtml;
             });
             let maxCount = Math.max(...hourlyCounts);
-            let rowClass = (maxCount >= 5) ? "row-over" : (maxCount <= 3 ? "row-short" : "");
+            let rowClass = "";
+
+            if (currentStore === 'yoki.') {
+                // yoki. の基準: 5席以上なら赤(row-over)、5席未満なら青(row-short)
+                rowClass = (maxCount >= 5) ? "row-over" : "row-short";
+            } else {
+                // annee など他店舗は従来の基準（5以上で赤、3以下で青）
+                rowClass = (maxCount >= 5) ? "row-over" : (maxCount <= 3 ? "row-short" : "");
+            }
+
             let dateClass = "date-col" + (dayOfWeek === 0 ? " sun" : (dayOfWeek === 6 ? " sat" : "")) + (globalHolidays[isoDate] ? " holiday" : "");
             tr.className = rowClass;
             tr.innerHTML = `<td class="${dateClass} ${rowClass}">${m}/${da} <span style="font-size:0.7em">(${weekChars[dayOfWeek]})</span></td>` + rowHtml;
