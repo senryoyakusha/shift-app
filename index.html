@@ -169,7 +169,7 @@
                 <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee0917', 'var(--annee-g2)', 'annee')">annee<br>0917</button>
                 <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee1621', 'var(--annee-g2)', 'annee')">annee<br>1621</button>
                 <button class="stamp" style="background:var(--annee-g2)" onclick="applyShift('annee1721', 'var(--annee-g2)', 'annee')">annee<br>1721</button>
-                <button class="stamp s-del" style="border: 1px dashed #666; color: #666; font-size: 1rem;" onclick="createCustomStamp()">＋</button>
+                <button class="stamp s-del" style="border: 1px dashed #666; color: #666; font-size: 1rem;" onclick="createCustomStamp('annee')">＋</button>
             </div>
         </div>
 
@@ -187,7 +187,7 @@
                 <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.1116', 'var(--yoki-g2)', 'yoki.')">yoki.<br>1116</button>
                 <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.1621', 'var(--yoki-g2)', 'yoki.')">yoki.<br>1621</button>
                 <button class="stamp" style="background:var(--yoki-g2)" onclick="applyShift('yoki.1721', 'var(--yoki-g2)', 'yoki.')">yoki.<br>1721</button>
-                <button class="stamp s-del" style="border: 1px dashed #666; color: #666; font-size: 1rem;" onclick="createCustomStamp()">＋</button>
+                <button class="stamp s-del" style="border: 1px dashed #666; color: #666; font-size: 1rem;" onclick="createCustomStamp('yoki.')">＋</button>
             </div>
         </div>
 
@@ -470,7 +470,6 @@
         const section = document.createElement('div'); section.className = 'shared-section';
         const title = document.createElement('div'); title.className = 'month-header';
         
-        // ★ 変更点1：代表かコアメンバーの場合のみ「店舗合計」のバッジ用HTMLを用意する
         let totalBadgeHtml = "";
         const isSpecialUser = currentUserObj.is_boss || currentUserObj.is_core;
         if (isSpecialUser) {
@@ -517,10 +516,8 @@
             let rowClass = "";
 
             if (currentStore === 'yoki.') {
-                // yoki. の基準: 5席以上なら赤(row-over)、5席未満なら青(row-short)
                 rowClass = (maxCount >= 5) ? "row-over" : "row-short";
             } else {
-                // annee など他店舗は従来の基準（5以上で赤、3以下で青）
                 rowClass = (maxCount >= 5) ? "row-over" : (maxCount <= 3 ? "row-short" : "");
             }
 
@@ -538,7 +535,7 @@
         let adjustHtml = `<td class="date-col" style="font-size:0.65rem;">調整休</td>`;
         let daysHtml = `<td class="date-col" style="font-size:0.65rem;">出勤<br>日数</td>`;
 
-        let grandTotalHrs = 0; // ★ 変更点2：店舗全員の合計時間をいれる箱
+        let grandTotalHrs = 0; 
 
         targetUsers.forEach(u => {
             let userTotalHrs = 0;
@@ -564,14 +561,13 @@
                 }
             });
 
-            grandTotalHrs += userTotalHrs; // ★ 変更点3：各ユーザーの合計時間を店舗合計に足す
+            grandTotalHrs += userTotalHrs; 
 
             totalHtml += `<td>${userTotalHrs}h</td>`;
             adjustHtml += `<td>${adjustCount > 0 ? adjustCount + '日' : '0'}</td>`;
             daysHtml += `<td>${totalDays > 0 ? totalDays + '日' : '0'}</td>`;
         });
         
-        // ★ 変更点4：権限がある場合のみ、ヘッダーのバッジの数字を書き換える
         if (isSpecialUser) {
             const totalSpan = title.querySelector(`#shared-total-${year}-${month}`);
             if (totalSpan) totalSpan.innerText = `店舗合計: ${grandTotalHrs}時間`;
@@ -721,63 +717,40 @@
         if (autoHide) setTimeout(() => { if (pendingQueue.length === 0) statusEl.classList.remove('status-show'); }, 2000);
     }
 
-    function createCustomStamp() {
-  // ① 権限チェック：コアメンバー・代表、または複数店舗に所属しているか
-  const isSpecial = currentUserObj.is_boss || currentUserObj.is_core || currentUserObj.stores.length > 1;
-  if (!isSpecial) {
-    alert("マイスタンプの作成は、複数店舗を管理するメンバー専用の機能です。");
-    return;
-  }
+    function createCustomStamp(targetStore) {
+      let label = prompt("出勤と退勤時間を4桁の数字で入力してください\n（例：1117）"); // [cite: 173]
 
-  // ② 時間の入力
-  let label = prompt("出勤と退勤時間を4桁の数字で入力してください\n（例：1117）");
-  if (!label) return;
-  if (label.length === 3) label = '0' + label;
+      if (!label) return; // [cite: 173]
 
-  const match = label.match(/^(\d{2})(\d{2})$/);
-  if (!match) { 
-    alert("4桁の数字で入力してください（例：1117）"); 
-    return; 
-  }
+      if (label.length === 3) label = '0' + label; // [cite: 174]
 
-  const h = parseInt(match[2], 10) - parseInt(match[1], 10);
-  if (h <= 0) { 
-    alert("正しい時間を入力してください"); 
-    return; 
-  }
+      const match = label.match(/^(\d{2})(\d{2})$/); // [cite: 174]
 
-  // ③ 店舗の選択
-  let targetStore = prompt("どちらの店舗のスタンプを作成しますか？\n「1」: annee\n「2」: yoki.\n半角数字で入力してください", "1");
-  if (targetStore !== "1" && targetStore !== "2") {
-    alert("作成をキャンセルしました。");
-    return;
-  }
-  let selectedStore = (targetStore === "1") ? 'annee' : 'yoki.';
+      if (!match) { alert("4桁の数字で入力してください（例：1117）"); return; } // [cite: 174]
 
-  // ④ 色とラベルの生成
-  let colorVar = (h >= 5.5) ? 
-    (selectedStore === 'annee' ? 'var(--annee-g1)' : 'var(--yoki-g1)') : 
-    (selectedStore === 'annee' ? 'var(--annee-g2)' : 'var(--yoki-g2)');
-  let storePrefix = selectedStore === 'annee' ? 'annee' : 'yoki.';
-  const finalLabel = storePrefix + label;
+      const h = parseInt(match[2], 10) - parseInt(match[1], 10); // [cite: 175]
 
-  // ⑤ スタンプの保存
-  const stampData = { 
-    label: finalLabel, 
-    color: colorVar, 
-    store: selectedStore, 
-    text: `${storePrefix}<br>${label}` 
-  };
+      if (h <= 0) { alert("正しい時間を入力してください"); return; } // [cite: 175]
 
-  if (!myCustomStamps.some(s => s.label === finalLabel)) {
-    myCustomStamps.push(stampData);
-    localStorage.setItem('my_custom_stamps', JSON.stringify(myCustomStamps));
-  }
+      // ↓ currentStore ではなく targetStore を使って判定するように修正
+      let colorVar = (h >= 5.5) ? (targetStore === 'annee' ? 'var(--annee-g1)' : 'var(--yoki-g1)') : (targetStore === 'annee' ? 'var(--annee-g2)' : 'var(--yoki-g2)');
+      
+      // ↓ こちらも targetStore を使用
+      let storePrefix = targetStore === 'annee' ? 'annee' : 'yoki.';
+      const finalLabel = storePrefix + label;
+      
+      // ↓ ここも targetStore を使用
+      const stampData = { label: finalLabel, color: colorVar, store: targetStore, text: `${storePrefix}<br>${label}` };
 
-  applyShift(finalLabel, colorVar, selectedStore); 
-  closePalette();
-  renderMyStamps(); // パレットの表示を即時更新
-}
+      if (!myCustomStamps.some(s => s.label === finalLabel)) {
+        myCustomStamps.push(stampData); // [cite: 178]
+        localStorage.setItem('my_custom_stamps', JSON.stringify(myCustomStamps)); // [cite: 179]
+      }
+
+      // ↓ 最後に適用するシフトも targetStore を渡す
+      applyShift(finalLabel, colorVar, targetStore); 
+      closePalette(); // [cite: 179]
+    }
 
     function openSettings() {
         if (syncMode === 'common') document.getElementById('syncCommon').checked = true;
@@ -806,6 +779,3 @@
 </script>
 </body>
 </html>
-
-
-
