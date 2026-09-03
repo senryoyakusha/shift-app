@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Shift v2 直通テスト</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; background: #f7f7f7; color: #222; }
+    main { max-width: 520px; margin: 0 auto; padding: 24px 18px 48px; }
+    .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 12px; padding: 18px; margin-bottom: 14px; }
+    h1 { font-size: 22px; margin: 0 0 8px; }
+    p { font-size: 14px; line-height: 1.6; color: #555; }
+    label { display: block; font-size: 13px; font-weight: 700; margin: 14px 0 6px; }
+    input, select, button { width: 100%; box-sizing: border-box; min-height: 44px; border-radius: 8px; font-size: 16px; }
+    input, select { border: 1px solid #ccc; background: #fff; padding: 9px 10px; }
+    button { border: 0; background: #222; color: #fff; font-weight: 700; margin-top: 18px; }
+    button:disabled { opacity: .45; }
+    #status { white-space: pre-wrap; word-break: break-word; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; background: #f4f4f4; border-radius: 8px; padding: 12px; }
+    .ok { color: #126b36; }
+    .warn { color: #9b5f00; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1>Shift v2 直通テスト</h1>
+    <p>このページは <strong>GAS / Google Sheetsを使いません</strong>。LINE本人確認 → senryoyakusha OS API → Supabase の直通だけを検証します。</p>
+    <p class="warn">現在は椹木一輝 / 2027年1月だけDB側で許可しています。</p>
+  </div>
+
+  <div class="card">
+    <div id="who">LINE確認中...</div>
+    <label for="date">日付</label>
+    <input id="date" type="date" min="2027-01-01" max="2027-01-31" value="2027-01-05">
+
+    <label for="stamp">勤務</label>
+    <select id="stamp">
+      <option value="annee1020">annee 10:00–20:00</option>
+      <option value="annee1621">annee 16:00–21:00</option>
+      <option value="annee1721">annee 17:00–21:00</option>
+    </select>
+
+    <button id="save" disabled>Supabaseへ直接保存</button>
+  </div>
+
+  <div class="card">
+    <strong>結果</strong>
+    <div id="status">初期化中...</div>
+  </div>
+</main>
+
+<script>
+  const LIFF_ID = "2009130838-xQhedkHz";
+  const API_URL = "https://os.senryoyakusha.com/api/shifts/line/direct-pilot";
+  const STAMPS = {
+    annee1020: { shiftType: "work", startTime: "10:00", endTime: "20:00", workHours: 10 },
+    annee1621: { shiftType: "work", startTime: "16:00", endTime: "21:00", workHours: 5 },
+    annee1721: { shiftType: "work", startTime: "17:00", endTime: "21:00", workHours: 4 }
+  };
+
+  const statusEl = document.getElementById("status");
+  const whoEl = document.getElementById("who");
+  const saveButton = document.getElementById("save");
+
+  function setStatus(message) {
+    statusEl.textContent = message;
+  }
+
+  async function initialize() {
+    try {
+      await liff.init({ liffId: LIFF_ID, withLoginOnExternalBrowser: true });
+      if (!liff.isLoggedIn()) {
+        liff.login();
+        return;
+      }
+
+      const accessToken = liff.getAccessToken();
+      if (!accessToken) throw new Error("LIFF access tokenを取得できませんでした。");
+
+      const profile = await liff.getProfile();
+      whoEl.innerHTML = `<span class="ok">LINE確認OK</span>：${profile.displayName || "ユーザー"}`;
+      saveButton.disabled = false;
+      setStatus("準備OK。ここからの保存はSheetsを経由しません。");
+    } catch (error) {
+      setStatus(`初期化エラー: ${error && error.message ? error.message : String(error)}`);
+    }
+  }
+
+  saveButton.addEventListener("click", async () => {
+    saveButton.disabled = true;
+    setStatus("Supabaseへ直送中...");
+    try {
+      const accessToken = liff.getAccessToken();
+      if (!accessToken) throw new Error("LIFF access tokenがありません。");
+
+      const date = document.getElementById("date").value;
+      const stampKey = document.getElementById("stamp").value;
+      const stamp = STAMPS[stampKey];
+      if (!date || !/^2027-01-\d{2}$/.test(date) || !stamp) throw new Error("テスト入力が不正です。");
+
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accessToken,
+          operationId: crypto.randomUUID(),
+          date,
+          shiftType: stamp.shiftType,
+          startTime: stamp.startTime,
+          endTime: stamp.endTime,
+          workHours: stamp.workHours,
+          clientCreatedAt: new Date().toISOString()
+        })
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(`${response.status}: ${payload.error || "direct save failed"}`);
+
+      setStatus(`直通保存成功\nHTTP ${response.status}\n${date} ${stampKey}\n\n${JSON.stringify(payload.result, null, 2)}`);
+    } catch (error) {
+      setStatus(`直通保存エラー\n${error && error.message ? error.message : String(error)}`);
+    } finally {
+      saveButton.disabled = false;
+    }
+  });
+
+  initialize();
+</script>
+</body>
+</html>
