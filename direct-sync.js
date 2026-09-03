@@ -8,14 +8,15 @@
   var STORE_NAME = "lineOperations";
   var MAX_BATCH = 30;
   var RETRY_DELAY_MS = 2500;
+  var ADAPTER_VERSION = "2026-09-03.2";
 
   var state = {
     config: null,
     directRunning: false,
     directTimer: null,
     configLoading: false,
-    legacyApplyShift: null,
-    legacyProcessBatchSave: null
+    legacyProcessBatchSave: null,
+    pendingStampClick: null
   };
 
   function safeGlobal(name) {
@@ -32,6 +33,40 @@
     } catch (_) {
       try { window[name] = value; } catch (_) {}
     }
+  }
+
+  function recordDebug(eventName, detail) {
+    try {
+      localStorage.setItem("shift_v2_direct_debug", JSON.stringify({
+        version: ADAPTER_VERSION,
+        event: eventName,
+        detail: detail || null,
+        at: new Date().toISOString()
+      }));
+    } catch (_) {}
+  }
+
+  function newOperationId() {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+      return window.crypto.randomUUID();
+    }
+    if (!window.crypto || typeof window.crypto.getRandomValues !== "function") {
+      throw new Error("Secure random UUID is unavailable.");
+    }
+    var bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    var hex = Array.prototype.map.call(bytes, function (value) {
+      return value.toString(16).padStart(2, "0");
+    }).join("");
+    return [
+      hex.slice(0, 8),
+      hex.slice(8, 12),
+      hex.slice(12, 16),
+      hex.slice(16, 20),
+      hex.slice(20)
+    ].join("-");
   }
 
   function getAccessToken() {
@@ -119,7 +154,9 @@
         var request = store.getAll();
         request.onsuccess = function () {
           var rows = request.result || [];
-          rows.sort(function (a, b) { return String(a.clientCreatedAt).localeCompare(String(b.clientCreatedAt)); });
+          rows.sort(function (a, b) {
+            return String(a.clientCreatedAt).localeCompare(String(b.clientCreatedAt));
+          });
           resolve(rows.slice(0, limit));
         };
         request.onerror = function () { reject(request.error); };
@@ -164,14 +201,16 @@
   async function clearOutsideRollout() {
     if (!state.config) return;
     var rows = await takeBatch(5000);
-    var remove = rows.filter(function (row) { return !isDirectDate(row.date); }).map(function (row) { return row.operationId; });
+    var remove = rows
+      .filter(function (row) { return !isDirectDate(row.date); })
+      .map(function (row) { return row.operationId; });
     await removeOperations(remove);
   }
 
-  function directOperationFromStamp(date, label, store) {
+  function directOperationFromStamp(date, label, store, exactWorkHours) {
     var now = new Date().toISOString();
     var base = {
-      operationId: crypto.randomUUID(),
+      operationId: newOperationId(),
       shiftKey: date + ":1",
       date: date,
       baseVersion: null,
@@ -196,7 +235,7 @@
         shiftType: commonTypes[label],
         startTime: null,
         endTime: null,
-        workHours: 0
+        workHours: Number.isFinite(Number(exactWorkHours)) ? Number(exactWorkHours) : 0
       });
     }
 
@@ -204,16 +243,26 @@
     if (!match) return null;
     var startHour = Number(match[1]);
     var endHour = Number(match[2]);
-    if (!Number.isInteger(startHour) || !Number.isInteger(endHour) || startHour < 0 || endHour > 24 || endHour < startHour) return null;
+    if (
+      !Number.isInteger(startHour)
+      || !Number.isInteger(endHour)
+      || startHour < 0
+      || endHour > 24
+      || endHour < startHour
+    ) return null;
 
     var workHours = endHour - startHour;
-    try {
-      var calc = safeGlobal("calcShiftData");
-      if (typeof calc === "function") {
-        var calculated = Number(calc(label));
-        if (Number.isFinite(calculated) && calculated >= 0) workHours = calculated;
-      }
-    } catch (_) {}
+    if (Number.isFinite(Number(exactWorkHours)) && Number(exactWorkHours) >= 0) {
+      workHours = Number(exactWorkHours);
+    } else {
+      try {
+        var calc = safeGlobal("calcShiftData");
+        if (typeof calc === "function") {
+          var calculated = Number(calc(label));
+          if (Number.isFinite(calculated) && calculated >= 0) workHours = calculated;
+        }
+      } catch (_) {}
+    }
 
     return Object.assign(base, {
       operationKind: "upsert",
@@ -223,6 +272,129 @@
       endTime: String(endHour).padStart(2, "0") + ":00",
       workHours: workHours
     });
+  }
+
+  function currentLineUserId() {
+    return localStorage.getItem("shift_app_user_id") || safeGlobal("CURRENT_USER_ID") || null;
+  }
+
+  function activeDateFromDom() {
+    var active = document.querySelector(".day.active-focus[data-date]");
+    if (active && active.getAttribute("data-date")) return active.getAttribute("data-date");
+    var fallback = safeGlobal("activeDateString");
+    return typeof fallback === "string" && fallback ? fallback : null;
+  }
+
+  function readCachedRow(date) {
+    var rows;
+    try {
+      rows = JSON.parse(localStorage.getItem("cached_shifts") || "[]");
+    } catch (_) {
+      rows = [];
+    }
+    if (!Array.isArray(rows)) return null;
+    var lineUserId = currentLineUserId();
+    for (var i = rows.length - 1; i >= 0; i -= 1) {
+      var row = rows[i];
+      if (!row || row.date !== date) continue;
+      if (lineUserId && row.user_id !== lineUserId) continue;
+      return row;
+    }
+    return null;
+  }
+
+  async function captureCommittedStamp(intent) {
+    if (!intent || !intent.date) return;
+    var after = readCachedRow(intent.date);
+    var afterSerialized = JSON.stringify(after || null);
+    if (afterSerialized === intent.beforeSerialized) {
+      recordDebug("stamp_no_change", { date: intent.date });
+      return;
+    }
+
+    if (!state.config) await loadConfig();
+    if (!isDirectDate(intent.date)) {
+      recordDebug("stamp_outside_rollout", { date: intent.date });
+      return;
+    }
+
+    var operation;
+    try {
+      operation = after
+        ? directOperationFromStamp(
+            intent.date,
+            after.shift_label || "",
+            after.store || "",
+            Number(after.work_hours)
+          )
+        : directOperationFromStamp(intent.date, "", "", null);
+    } catch (error) {
+      recordDebug("stamp_operation_error", {
+        date: intent.date,
+        message: error && error.message ? error.message : String(error)
+      });
+      console.warn("Shift v2 could not construct direct operation", error);
+      return;
+    }
+
+    if (!operation) {
+      recordDebug("stamp_unrecognized", { date: intent.date });
+      return;
+    }
+
+    try {
+      await putLatest(operation);
+      recordDebug("stamp_queued", {
+        date: intent.date,
+        operationKind: operation.operationKind,
+        shiftType: operation.shiftType || null,
+        storeKey: operation.storeKey || null
+      });
+      scheduleDrain(50);
+    } catch (error) {
+      recordDebug("stamp_queue_error", {
+        date: intent.date,
+        message: error && error.message ? error.message : String(error)
+      });
+      console.warn("Shift v2 could not persist direct operation", error);
+    }
+  }
+
+  function installStampCapture() {
+    document.addEventListener("click", function (event) {
+      var target = event.target;
+      if (!target || typeof target.closest !== "function") return;
+      var button = target.closest("button.stamp");
+      if (!button) return;
+      var palette = document.getElementById("paletteOverlay");
+      if (!palette || !palette.contains(button)) return;
+
+      var date = activeDateFromDom();
+      if (!date) return;
+      var before = readCachedRow(date);
+      state.pendingStampClick = {
+        button: button,
+        date: date,
+        beforeSerialized: JSON.stringify(before || null),
+        startedAt: Date.now()
+      };
+    }, true);
+
+    document.addEventListener("click", function (event) {
+      var intent = state.pendingStampClick;
+      if (!intent) return;
+      var target = event.target;
+      if (!target || typeof target.closest !== "function") return;
+      var button = target.closest("button.stamp");
+      if (!button || button !== intent.button) return;
+
+      state.pendingStampClick = null;
+      Promise.resolve().then(function () {
+        return captureCommittedStamp(intent);
+      }).catch(function (error) {
+        console.warn("Shift v2 stamp capture failed", error);
+      });
+    }, false);
   }
 
   async function loadConfig() {
@@ -238,16 +410,33 @@
       });
       if (!response.ok) throw new Error("Shift direct config HTTP " + response.status);
       var payload = await response.json();
-      state.config = payload && payload.config ? payload.config : { enabled: false, writeMode: "dual_write" };
-      localStorage.setItem("shift_v2_direct_config", JSON.stringify({ value: state.config, cachedAt: Date.now() }));
+      state.config = payload && payload.config
+        ? payload.config
+        : { enabled: false, writeMode: "dual_write" };
+      localStorage.setItem("shift_v2_direct_config", JSON.stringify({
+        value: state.config,
+        cachedAt: Date.now()
+      }));
       await clearOutsideRollout();
+      recordDebug("config_loaded", {
+        enabled: state.config.enabled === true,
+        allowedFrom: state.config.allowedFrom || null,
+        allowedTo: state.config.allowedTo || null,
+        writeMode: state.config.writeMode || "dual_write"
+      });
       scheduleDrain(0);
-      scheduleLegacyDrain();
       return state.config;
     } catch (error) {
       console.warn("Shift v2 direct config unavailable; keeping legacy save path", error);
-      state.config = { enabled: false, allowedFrom: null, allowedTo: null, writeMode: "dual_write" };
-      scheduleLegacyDrain();
+      state.config = {
+        enabled: false,
+        allowedFrom: null,
+        allowedTo: null,
+        writeMode: "dual_write"
+      };
+      recordDebug("config_error", {
+        message: error && error.message ? error.message : String(error)
+      });
       return state.config;
     } finally {
       state.configLoading = false;
@@ -257,7 +446,11 @@
   function restoreCachedConfig() {
     try {
       var cached = JSON.parse(localStorage.getItem("shift_v2_direct_config") || "null");
-      if (cached && cached.value && Date.now() - Number(cached.cachedAt || 0) < 6 * 60 * 60 * 1000) {
+      if (
+        cached
+        && cached.value
+        && Date.now() - Number(cached.cachedAt || 0) < 6 * 60 * 60 * 1000
+      ) {
         state.config = cached.value;
       }
     } catch (_) {}
@@ -265,7 +458,9 @@
 
   function scheduleDrain(delay) {
     clearTimeout(state.directTimer);
-    state.directTimer = setTimeout(function () { drainDirectQueue(); }, delay == null ? 800 : delay);
+    state.directTimer = setTimeout(function () {
+      drainDirectQueue();
+    }, delay == null ? 800 : delay);
   }
 
   function removeLegacyDates(dates) {
@@ -273,21 +468,14 @@
     try {
       var queue = safeGlobal("pendingQueue");
       if (!Array.isArray(queue)) return;
-      var filtered = queue.filter(function (item) { return !dates.has(item.date); });
+      var filtered = queue.filter(function (item) {
+        return !dates.has(item.date);
+      });
       writeGlobal("pendingQueue", filtered);
       localStorage.setItem("shift_backup", JSON.stringify(filtered));
     } catch (error) {
       console.warn("Shift v2 could not prune legacy queue", error);
     }
-  }
-
-  function scheduleLegacyDrain() {
-    setTimeout(function () {
-      try {
-        var fn = state.legacyProcessBatchSave;
-        if (typeof fn === "function") fn();
-      } catch (_) {}
-    }, 0);
   }
 
   async function drainDirectQueue() {
@@ -306,7 +494,9 @@
         var batch = await takeBatch(MAX_BATCH);
         if (!batch.length) break;
 
-        var outsideIds = batch.filter(function (op) { return !isDirectDate(op.date); }).map(function (op) { return op.operationId; });
+        var outsideIds = batch
+          .filter(function (op) { return !isDirectDate(op.date); })
+          .map(function (op) { return op.operationId; });
         if (outsideIds.length) {
           await removeOperations(outsideIds);
           batch = batch.filter(function (op) { return isDirectDate(op.date); });
@@ -330,6 +520,10 @@
           });
         } catch (error) {
           await markRetry(batch.map(function (op) { return op.operationId; }));
+          recordDebug("direct_network_retry", {
+            count: batch.length,
+            message: error && error.message ? error.message : String(error)
+          });
           console.warn("Shift v2 direct network retry", error);
           setTimeout(function () { scheduleDrain(0); }, RETRY_DELAY_MS);
           break;
@@ -338,6 +532,11 @@
         var payload = await response.json().catch(function () { return {}; });
         if (!response.ok) {
           await markRetry(batch.map(function (op) { return op.operationId; }));
+          recordDebug("direct_rejected", {
+            count: batch.length,
+            status: response.status,
+            error: payload && payload.error ? payload.error : null
+          });
           console.warn("Shift v2 direct save rejected", response.status, payload);
           if (response.status >= 500 || response.status === 429) {
             setTimeout(function () { scheduleDrain(0); }, RETRY_DELAY_MS);
@@ -346,18 +545,25 @@
         }
 
         var result = payload && payload.result ? payload.result : {};
-        var acknowledged = Array.isArray(result.acknowledgedOperationIds) ? result.acknowledgedOperationIds : [];
+        var acknowledged = Array.isArray(result.acknowledgedOperationIds)
+          ? result.acknowledgedOperationIds
+          : [];
         if (!acknowledged.length) {
           await markRetry(batch.map(function (op) { return op.operationId; }));
+          recordDebug("direct_no_ack", { count: batch.length });
           break;
         }
 
         await removeOperations(acknowledged);
 
         var ackSet = new Set(acknowledged);
-        var acknowledgedBatch = batch.filter(function (op) { return ackSet.has(op.operationId); });
+        var acknowledgedBatch = batch.filter(function (op) {
+          return ackSet.has(op.operationId);
+        });
         if (state.config.writeMode === "direct_only") {
-          removeLegacyDates(new Set(acknowledgedBatch.map(function (op) { return op.date; })));
+          removeLegacyDates(new Set(acknowledgedBatch.map(function (op) {
+            return op.date;
+          })));
         }
 
         try {
@@ -369,39 +575,15 @@
           });
           localStorage.setItem("shift_v2_versions", JSON.stringify(versions));
         } catch (_) {}
+
+        recordDebug("direct_ack", {
+          sent: batch.length,
+          acknowledged: acknowledged.length
+        });
       }
     } finally {
       state.directRunning = false;
-      scheduleLegacyDrain();
     }
-  }
-
-  function wrapApplyShift() {
-    var legacy = safeGlobal("applyShift") || window.applyShift;
-    if (typeof legacy !== "function") return false;
-    if (legacy.__shiftV2Wrapped) return true;
-    state.legacyApplyShift = legacy;
-
-    var wrapped = function (label, color, store) {
-      var date = safeGlobal("activeDateString");
-      var result = legacy.apply(this, arguments);
-      if (!date) return result;
-
-      var operation = directOperationFromStamp(date, label, store);
-      if (!operation) return result;
-
-      putLatest(operation).then(function () {
-        if (!state.config) loadConfig();
-        scheduleDrain(800);
-      }).catch(function (error) {
-        console.warn("Shift v2 could not persist direct operation", error);
-      });
-      return result;
-    };
-    wrapped.__shiftV2Wrapped = true;
-    writeGlobal("applyShift", wrapped);
-    window.applyShift = wrapped;
-    return true;
   }
 
   function wrapLegacySave() {
@@ -412,19 +594,31 @@
 
     var wrapped = async function () {
       var queue = safeGlobal("pendingQueue");
-      if (!Array.isArray(queue) || !queue.length) return legacy.apply(this, arguments);
-
-      if (!state.config) {
-        await loadConfig();
+      if (!Array.isArray(queue) || !queue.length) {
+        return legacy.apply(this, arguments);
       }
 
-      if (state.config && state.config.enabled === true && state.config.writeMode === "direct_only") {
-        var hasDirectOnly = queue.some(function (item) { return item && isDirectDate(item.date); });
-        if (hasDirectOnly) {
+      if (!state.config) await loadConfig();
+
+      if (
+        state.config
+        && state.config.enabled === true
+        && state.config.writeMode === "direct_only"
+      ) {
+        var directItems = queue.filter(function (item) {
+          return item && isDirectDate(item.date);
+        });
+        if (directItems.length) {
+          var legacyItems = queue.filter(function (item) {
+            return !item || !isDirectDate(item.date);
+          });
+          writeGlobal("pendingQueue", legacyItems);
+          localStorage.setItem("shift_backup", JSON.stringify(legacyItems));
           scheduleDrain(0);
-          return;
+          if (!legacyItems.length) return;
         }
       }
+
       return legacy.apply(this, arguments);
     };
     wrapped.__shiftV2Wrapped = true;
@@ -433,10 +627,9 @@
     return true;
   }
 
-  function installWrappers() {
-    var applyOk = wrapApplyShift();
+  function installLegacySaveWrapper() {
     var saveOk = wrapLegacySave();
-    if (!applyOk || !saveOk) setTimeout(installWrappers, 250);
+    if (!saveOk) setTimeout(installLegacySaveWrapper, 250);
   }
 
   function waitForLiff() {
@@ -455,13 +648,15 @@
   }
 
   restoreCachedConfig();
-  installWrappers();
+  installStampCapture();
+  installLegacySaveWrapper();
   waitForLiff();
 
   window.addEventListener("online", function () {
     loadConfig();
     scheduleDrain(0);
   });
+
   document.addEventListener("visibilitychange", function () {
     if (!document.hidden) {
       loadConfig();
@@ -470,8 +665,16 @@
   });
 
   window.ShiftV2DirectSync = {
+    version: ADAPTER_VERSION,
     reloadConfig: loadConfig,
     drain: drainDirectQueue,
-    isDirectDate: isDirectDate
+    isDirectDate: isDirectDate,
+    debug: function () {
+      try {
+        return JSON.parse(localStorage.getItem("shift_v2_direct_debug") || "null");
+      } catch (_) {
+        return null;
+      }
+    }
   };
 })();
