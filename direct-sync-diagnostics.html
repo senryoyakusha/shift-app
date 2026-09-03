@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shift Direct Sync Diagnostics</title>
+  <style>
+    body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:0;background:#f7f7f7;color:#222}
+    main{max-width:720px;margin:0 auto;padding:20px}
+    .card{background:#fff;border:1px solid #ddd;border-radius:12px;padding:16px;margin-bottom:12px}
+    h1{font-size:20px;margin:0 0 12px} h2{font-size:16px;margin:0 0 8px}
+    pre{white-space:pre-wrap;word-break:break-word;background:#f4f4f4;border-radius:8px;padding:12px;font-size:12px;line-height:1.5}
+    button{width:100%;min-height:44px;border:0;border-radius:8px;background:#222;color:#fff;font-weight:700}
+  </style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1>Shift v2 直通同期 診断</h1>
+    <p>同じGitHub Pages originの通常シフトアプリが保存した、秘密情報を含まないローカル診断だけを表示します。</p>
+    <button onclick="refreshDiagnostics()">再読み込み</button>
+  </div>
+  <div class="card"><h2>direct-sync 最終イベント</h2><pre id="debug">読み込み中...</pre></div>
+  <div class="card"><h2>rollout config cache</h2><pre id="config">読み込み中...</pre></div>
+  <div class="card"><h2>IndexedDB 未送信queue</h2><pre id="queue">読み込み中...</pre></div>
+</main>
+<script>
+function pretty(value){try{return JSON.stringify(value,null,2)}catch(_){return String(value)}}
+function readJson(key){try{return JSON.parse(localStorage.getItem(key)||'null')}catch(e){return {parseError:String(e),raw:localStorage.getItem(key)}}}
+function readQueue(){return new Promise(function(resolve){
+  var request=indexedDB.open('senryoyakusha-shift-v2',1);
+  request.onupgradeneeded=function(){var db=request.result;if(!db.objectStoreNames.contains('lineOperations')){var s=db.createObjectStore('lineOperations',{keyPath:'operationId'});s.createIndex('shiftKey','shiftKey',{unique:false});s.createIndex('clientCreatedAt','clientCreatedAt',{unique:false});}};
+  request.onerror=function(){resolve({error:String(request.error||'IndexedDB open failed')})};
+  request.onsuccess=function(){var db=request.result;try{var tx=db.transaction('lineOperations','readonly');var req=tx.objectStore('lineOperations').getAll();req.onsuccess=function(){resolve(req.result||[]);db.close()};req.onerror=function(){resolve({error:String(req.error||'IndexedDB read failed')});db.close()};}catch(e){resolve({error:String(e)});db.close();}}
+})}
+async function refreshDiagnostics(){
+  document.getElementById('debug').textContent=pretty(readJson('shift_v2_direct_debug'));
+  document.getElementById('config').textContent=pretty(readJson('shift_v2_direct_config'));
+  document.getElementById('queue').textContent=pretty(await readQueue());
+}
+refreshDiagnostics();
+</script>
+</body>
+</html>
