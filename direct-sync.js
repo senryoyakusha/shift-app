@@ -8,7 +8,9 @@
   var STORE_NAME = "lineOperations";
   var MAX_BATCH = 30;
   var RETRY_DELAY_MS = 2500;
-  var ADAPTER_VERSION = "2026-09-03.2";
+  var ADAPTER_VERSION = "2026-09-03.3";
+  var DIRECT_MARKER_ID = "__shiftV2DirectOperationId";
+  var DIRECT_MARKER_FINGERPRINT = "__shiftV2DirectFingerprint";
 
   var state = {
     config: null,
@@ -303,6 +305,46 @@
     return null;
   }
 
+  function legacyItemFingerprint(item) {
+    if (!item) return "";
+    return JSON.stringify([
+      String(item.date || ""),
+      String(item.shift_label || ""),
+      String(item.store || "")
+    ]);
+  }
+
+  function markLegacyItemDurable(date, operationId) {
+    try {
+      var queue = safeGlobal("pendingQueue");
+      if (!Array.isArray(queue)) return false;
+      var marked = false;
+      queue.forEach(function (item) {
+        if (!item || item.date !== date) return;
+        item[DIRECT_MARKER_ID] = operationId;
+        item[DIRECT_MARKER_FINGERPRINT] = legacyItemFingerprint(item);
+        marked = true;
+      });
+      if (marked) {
+        writeGlobal("pendingQueue", queue);
+        localStorage.setItem("shift_backup", JSON.stringify(queue));
+      }
+      return marked;
+    } catch (error) {
+      console.warn("Shift v2 could not mark legacy queue item as durable", error);
+      return false;
+    }
+  }
+
+  function hasDurableDirectMarker(item) {
+    return Boolean(
+      item
+      && typeof item[DIRECT_MARKER_ID] === "string"
+      && item[DIRECT_MARKER_ID]
+      && item[DIRECT_MARKER_FINGERPRINT] === legacyItemFingerprint(item)
+    );
+  }
+
   async function captureCommittedStamp(intent) {
     if (!intent || !intent.date) return;
     var after = readCachedRow(intent.date);
@@ -344,11 +386,13 @@
 
     try {
       await putLatest(operation);
+      var legacyMarked = markLegacyItemDurable(intent.date, operation.operationId);
       recordDebug("stamp_queued", {
         date: intent.date,
         operationKind: operation.operationKind,
         shiftType: operation.shiftType || null,
-        storeKey: operation.storeKey || null
+        storeKey: operation.storeKey || null,
+        legacyMarked: legacyMarked
       });
       scheduleDrain(50);
     } catch (error) {
@@ -605,17 +649,34 @@
         && state.config.enabled === true
         && state.config.writeMode === "direct_only"
       ) {
-        var directItems = queue.filter(function (item) {
-          return item && isDirectDate(item.date);
-        });
-        if (directItems.length) {
+        var suppressibleDates = new Set(
+          queue
+            .filter(function (item) {
+              return item && isDirectDate(item.date) && hasDurableDirectMarker(item);
+            })
+            .map(function (item) { return item.date; })
+        );
+
+        if (suppressibleDates.size) {
           var legacyItems = queue.filter(function (item) {
-            return !item || !isDirectDate(item.date);
+            return !item || !suppressibleDates.has(item.date);
           });
           writeGlobal("pendingQueue", legacyItems);
           localStorage.setItem("shift_backup", JSON.stringify(legacyItems));
           scheduleDrain(0);
+          recordDebug("direct_only_legacy_suppressed", {
+            count: queue.length - legacyItems.length,
+            fallbackCount: legacyItems.filter(function (item) {
+              return item && isDirectDate(item.date);
+            }).length
+          });
           if (!legacyItems.length) return;
+        } else {
+          recordDebug("direct_only_legacy_fallback", {
+            count: queue.filter(function (item) {
+              return item && isDirectDate(item.date);
+            }).length
+          });
         }
       }
 
