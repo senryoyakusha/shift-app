@@ -137,6 +137,7 @@
       id: lineUserId,
       name: String(user.name || ""),
       stores: Array.isArray(user.stores) ? user.stores.map(String) : [],
+      storeMemberships: Array.isArray(user.storeMemberships) ? user.storeMemberships : [],
       is_boss: user.isBoss === true,
       is_core: user.isCore === true
     };
