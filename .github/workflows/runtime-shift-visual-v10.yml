@@ -1,0 +1,108 @@
+name: Shift runtime visual v0.10 patch
+
+on:
+  push:
+    branches:
+      - chatgpt/runtime-shift-visual-v10
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/runtime-shift-visual-v10
+          fetch-depth: 0
+
+      - name: Patch runtime index without newline conversion
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('index.html')
+          data = path.read_bytes()
+          eol = b'\r\n' if b'\r\n' in data else b'\n'
+
+          def lines(*parts):
+              return eol.join(part.encode('utf-8') for part in parts) + eol
+
+          replacements = [
+              (
+                  lines(
+                      '            --annee-g1: #e76f51; --annee-g2: #f4a261; ',
+                      '            --yoki-g1: #1d3557;  --yoki-g2: #457b9d;  ',
+                      '            --common-color: #2a9d8f; ',
+                  ),
+                  lines(
+                      '            --annee-g1: #9a7b55; --annee-g2: #c2a982; ',
+                      '            --aulne-g1: #8c4a3c; --aulne-g2: #c47f6d; ',
+                      '            --yoki-g1: #1d3557;  --yoki-g2: #457b9d;  ',
+                      '            --common-color: #2a9d8f; ',
+                  ),
+                  'colors',
+              ),
+              (
+                  b'                displayLabel = displayLabel.replace(/^(annee|yoki\\.)(\\d{4})$/, "$1<br>$2");',
+                  b'                displayLabel = displayLabel.replace(/^(annee|yoki\\.|aulne)(\\d{4})$/, "$1<br>$2");',
+                  'personal label',
+              ),
+              (
+                  b'''                    cellHtml = `<td><span class="shift-badge" style="background:${shift.color}; max-width: 45px; margin:0 auto; font-size:0.6rem;">${shift.shift_label.replace('annee','').replace('yoki.','')}</span></td>`;''',
+                  b'''                    cellHtml = `<td><span class="shift-badge" style="background:${shift.color}; max-width: 45px; margin:0 auto; font-size:0.6rem;">${shift.store === 'common' ? shift.shift_label : shift.shift_label.replace(currentStore, '')}</span></td>`;''',
+                  'shared label',
+              ),
+              (
+                  lines(
+                      "            if (currentStore === 'yoki.') {",
+                      '                rowClass = (maxCount >= 5) ? "row-over" : "row-short";',
+                      '            } else {',
+                      '                rowClass = (maxCount >= 5) ? "row-over" : (maxCount <= 3 ? "row-short" : "");',
+                      '            }',
+                  ),
+                  lines(
+                      "            const seatCount = typeof window.shiftSeatCountForStore === 'function'",
+                      '                ? window.shiftSeatCountForStore(currentStore)',
+                      '                : null;',
+                      '            if (Number.isFinite(seatCount) && seatCount > 0) {',
+                      '                rowClass = maxCount > seatCount ? "row-over" : (maxCount < seatCount ? "row-short" : "");',
+                      '            }',
+                  ),
+                  'capacity',
+              ),
+              (
+                  b'<script src="./direct-sync.js?v=2026-09-04.9"></script>',
+                  b'<script src="./direct-sync.js?v=2026-09-04.10"></script>',
+                  'cache entry',
+              ),
+          ]
+
+          changed = False
+          for old, new, label in replacements:
+              if new in data:
+                  continue
+              count = data.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one old occurrence, got {count}')
+              data = data.replace(old, new, 1)
+              changed = True
+
+          if changed:
+              path.write_bytes(data)
+          PY
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "No changes needed"
+            exit 0
+          fi
+          git commit -m "feat: mirror Shift visual rules v0.10"
+          git push origin HEAD:chatgpt/runtime-shift-visual-v10
