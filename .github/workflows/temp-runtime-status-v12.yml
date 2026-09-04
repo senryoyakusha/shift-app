@@ -1,0 +1,40 @@
+name: temp runtime Shift status v12
+
+on:
+  push:
+    branches:
+      - chatgpt/runtime-status-v12
+    paths:
+      - .github/workflows/temp-runtime-status-v12.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/runtime-status-v12
+          fetch-depth: 0
+      - name: Patch runtime outer cache key and remove temporary workflow
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('index.html')
+          data = path.read_bytes()
+          old = b'./direct-sync.js?v=2026-09-04.11'
+          new = b'./direct-sync.js?v=2026-09-04.12'
+          count = data.count(old)
+          if count != 1:
+              raise SystemExit(f'expected exactly one cache key, found {count}')
+          path.write_bytes(data.replace(old, new, 1))
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/temp-runtime-status-v12.yml
+          git add index.html
+          git commit -m "chore: bump runtime Shift outer cache to v12"
+          git push origin HEAD:chatgpt/runtime-status-v12
