@@ -3,7 +3,7 @@
 
   var OPERATIONS_URL = "https://os.senryoyakusha.com/api/shifts/line/operations";
   var JOURNAL_KEY = "shift_v2_direct_journal_v1";
-  var RECOVERY_VERSION = "2026-09-04.1";
+  var RECOVERY_VERSION = "2026-09-04.2";
   var RECOVERY_DELAY_MS = 5000;
   var RETRY_DELAY_MS = 2500;
   var MAX_BATCH = 30;
@@ -399,7 +399,7 @@
       if (!button || button !== intent.button) return;
       state.pendingStampClick = null;
 
-      Promise.resolve().then(function () {
+      try {
         var after = readCachedRow(intent.date);
         if (JSON.stringify(after || null) === intent.beforeSerialized) return;
         var lineUserId = currentLineUserId();
@@ -407,13 +407,14 @@
         var operation = directOperationFromRow(intent.date, after);
         if (!operation) return;
 
-        // Synchronous by design: this survives an immediate LIFF/WebView close.
+        // Intentionally synchronous inside the click task: the journal commit
+        // completes before control returns to the LIFF/WebView host.
         persistJournal(lineUserId, operation);
         setTimeout(function () { adoptCoreMarker(intent.date, operation); }, 75);
         scheduleRecovery(RECOVERY_DELAY_MS);
-      }).catch(function (error) {
+      } catch (error) {
         console.warn("Shift v2 recovery journal capture failed", error);
-      });
+      }
     }, false);
   }
 
