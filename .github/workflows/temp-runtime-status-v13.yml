@@ -1,0 +1,43 @@
+name: temp runtime Shift status v13
+on:
+  push:
+    branches:
+      - chatgpt/runtime-status-v13
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/runtime-status-v13
+      - name: Mirror v13 false-unsynced fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          status = Path('direct-status.js')
+          text = status.read_text()
+          text = text.replace('var STATUS_VERSION = "2026-09-04.2";', 'var STATUS_VERSION = "2026-09-04.3";')
+          old = '    setStatus(replacement.text, replacement.background, replacement.autoHide);'
+          new = '    clearTimeout(hideTimer);\n    hideTimer = null;\n    var element = document.getElementById("saveStatus");\n    if (element) element.classList.remove("status-show");'
+          if old not in text:
+              raise SystemExit('legacy replacement call not found')
+          status.write_text(text.replace(old, new, 1))
+          sync = Path('direct-sync.js')
+          sync.write_text(sync.read_text().replace('var BOOTSTRAP_VERSION = "2026-09-04.12";', 'var BOOTSTRAP_VERSION = "2026-09-04.13";'))
+          index = Path('index.html')
+          raw = index.read_bytes()
+          oldb = b'./direct-sync.js?v=2026-09-04.12'
+          newb = b'./direct-sync.js?v=2026-09-04.13'
+          if oldb not in raw:
+              raise SystemExit('runtime index cache key not found')
+          index.write_bytes(raw.replace(oldb, newb, 1))
+          Path('.github/workflows/temp-runtime-status-v13.yml').unlink()
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "fix: mirror Shift false-unsynced status v13"
+          git push origin HEAD:chatgpt/runtime-status-v13
