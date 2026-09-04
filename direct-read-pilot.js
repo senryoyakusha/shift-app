@@ -4,7 +4,7 @@
   var CONFIG_URL = "https://os.senryoyakusha.com/api/shifts/line/config";
   var FULL_READ_URL = "https://os.senryoyakusha.com/api/shifts/line/read-full";
   var LEGACY_GAS_URL_FALLBACK = "https://script.google.com/macros/s/AKfycbz3Cnb2C_o8xjb9I_I_0jfgNXMhmo_TzcLh76MQ8FqYg9lYRx3VdEo4OdNVxpJO2fYl/exec";
-  var PILOT_VERSION = "2026-09-04.2";
+  var PILOT_VERSION = "2026-09-04.3";
 
   function recordDebug(eventName, detail) {
     try {
@@ -101,11 +101,19 @@
   }
 
   function canonicalShiftColor(shift) {
-    if (!shift || shift.shiftType !== "work") return "var(--common-color)";
+    if (!shift) return "var(--common-color)";
+    var shiftType = String(shift.shiftType || "");
+    if (shiftType === "off") return "#ff5e99";
+    if (shiftType === "requested_off") return "#e63946";
+    if (shiftType === "adjustment_off") return "#9381ff";
+    if (shiftType === "workday") return "#2a9d8f";
+    if (shiftType !== "work") return "var(--common-color)";
+
     var storeName = String(shift.storeName || "");
     var longShift = Number(shift.workHours || 0) >= 5.5;
     if (storeName === "annee") return longShift ? "var(--annee-g1)" : "var(--annee-g2)";
     if (storeName === "yoki.") return longShift ? "var(--yoki-g1)" : "var(--yoki-g2)";
+    if (storeName === "aulne") return longShift ? "var(--aulne-g1)" : "var(--aulne-g2)";
     return "var(--common-color)";
   }
 

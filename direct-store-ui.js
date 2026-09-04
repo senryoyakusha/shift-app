@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "2026-09-04.8";
+  var VERSION = "2026-09-04.10";
   var PRESETS = ["0920", "1020", "1021", "1621", "1721"];
 
   function normalizedStores(user) {
@@ -56,7 +56,24 @@
   function storeColor(store, longShift) {
     if (store === "annee") return longShift ? "var(--annee-g1)" : "var(--annee-g2)";
     if (store === "yoki.") return longShift ? "var(--yoki-g1)" : "var(--yoki-g2)";
+    if (store === "aulne") return longShift ? "var(--aulne-g1)" : "var(--aulne-g2)";
     return "var(--common-color)";
+  }
+
+  function seatCountForStore(storeName) {
+    var target = String(storeName || "").trim();
+    if (!target) return null;
+    var users = Array.isArray(globalUsersData) ? globalUsersData : [];
+    for (var i = 0; i < users.length; i++) {
+      var memberships = membershipRows(users[i]);
+      for (var j = 0; j < memberships.length; j++) {
+        var membership = memberships[j];
+        if (String(membership.storeName || "").trim() !== target) continue;
+        var seats = Number(membership.seatCount);
+        if (Number.isFinite(seats) && seats > 0) return seats;
+      }
+    }
+    return null;
   }
 
   function safeStoreId(store) {
@@ -184,6 +201,7 @@
 
   window.renderMyStamps = function () {
     ensureDynamicPaletteGroups();
+    var customChanged = false;
     document.querySelectorAll("#paletteContent [data-store]").forEach(function (group) {
       var store = group.dataset.store;
       var grid = group.querySelector(".stamp-grid");
@@ -195,16 +213,24 @@
       (Array.isArray(myCustomStamps) ? myCustomStamps : [])
         .filter(function (stamp) { return stamp && stamp.store === store; })
         .forEach(function (stamp) {
+          var match = String(stamp.label || "").match(/(\d{2})(\d{2})$/);
+          var hours = match ? parseInt(match[2], 10) - parseInt(match[1], 10) : 0;
+          var normalizedColor = hours > 0 ? storeColor(store, hours >= 5.5) : (stamp.color || storeColor(store, true));
+          if (stamp.color !== normalizedColor) {
+            stamp.color = normalizedColor;
+            customChanged = true;
+          }
           var button = document.createElement("button");
           button.type = "button";
           button.className = "stamp my-stamp";
-          button.style.background = stamp.color;
+          button.style.background = normalizedColor;
           button.innerHTML = stamp.text;
-          button.onclick = function () { applyShift(stamp.label, stamp.color, stamp.store); };
+          button.onclick = function () { applyShift(stamp.label, normalizedColor, stamp.store); };
           if (addButton) grid.insertBefore(button, addButton);
           else grid.appendChild(button);
         });
     });
+    if (customChanged) localStorage.setItem("my_custom_stamps", JSON.stringify(myCustomStamps));
   };
 
   window.openPalette = function (element, dateText, dateIso) {
@@ -257,6 +283,8 @@
     applyShift(finalLabel, color, targetStore);
     closePalette();
   };
+
+  window.shiftSeatCountForStore = seatCountForStore;
 
   try {
     if (Array.isArray(globalUsersData) && globalUsersData.length) applyPermissions();
