@@ -2,17 +2,9 @@
   "use strict";
 
   var CONFIG_URL = "https://os.senryoyakusha.com/api/shifts/line/config";
-  var READ_URL = "https://os.senryoyakusha.com/api/shifts/line/read";
+  var FULL_READ_URL = "https://os.senryoyakusha.com/api/shifts/line/read-full";
   var LEGACY_GAS_URL_FALLBACK = "https://script.google.com/macros/s/AKfycbz3Cnb2C_o8xjb9I_I_0jfgNXMhmo_TzcLh76MQ8FqYg9lYRx3VdEo4OdNVxpJO2fYl/exec";
-  var PILOT_VERSION = "2026-09-04.1";
-
-  function safeGlobal(name) {
-    try {
-      return Function("return typeof " + name + " !== 'undefined' ? " + name + " : undefined")();
-    } catch (_) {
-      return undefined;
-    }
-  }
+  var PILOT_VERSION = "2026-09-04.2";
 
   function recordDebug(eventName, detail) {
     try {
@@ -34,8 +26,10 @@
   }
 
   function legacyGasUrl() {
-    var configured = safeGlobal("GAS_URL");
-    return typeof configured === "string" && configured ? configured : LEGACY_GAS_URL_FALLBACK;
+    try {
+      if (typeof GAS_URL === "string" && GAS_URL) return GAS_URL;
+    } catch (_) {}
+    return LEGACY_GAS_URL_FALLBACK;
   }
 
   function requestUrl(input) {
@@ -98,6 +92,7 @@
     if (shiftType === "adjustment_off") return "調整休み";
     if (shiftType === "workday") return "作業日";
     if (shiftType !== "work") return "";
+
     var storeName = String(shift.storeName || "");
     var start = String(shift.startTime || "").slice(0, 2);
     var end = String(shift.endTime || "").slice(0, 2);
@@ -114,55 +109,52 @@
     return "var(--common-color)";
   }
 
-  function canonicalToLegacy(shift, readPayload) {
+  function canonicalToLegacy(shift) {
     var label = canonicalShiftLabel(shift);
-    if (!label || !readPayload || !readPayload.staff) return null;
+    var lineUserId = String(shift && shift.lineUserId || "");
+    if (!label || !lineUserId) return null;
+
     var store = shift.shiftType === "work" ? String(shift.storeName || "") : "common";
     var workHours = Number(shift.workHours || 0);
     return {
-      user_id: String(readPayload.staff.lineUserId || ""),
-      user_name: String(readPayload.staff.name || "あなた"),
+      user_id: lineUserId,
+      user_name: String(shift.staffName || ""),
       date: String(shift.date || ""),
       shift_label: label,
       color: canonicalShiftColor(shift),
       store: store,
       work_hours: workHours,
-      attendance_score: shift.shiftType === "work" ? (workHours >= 5.5 ? 1 : workHours > 0 ? 0.5 : 0) : 0
+      attendance_score: shift.shiftType === "work"
+        ? (workHours >= 5.5 ? 1 : workHours > 0 ? 0.5 : 0)
+        : 0
     };
   }
 
-  function ensureCurrentUser(users, readPayload) {
-    var lineUserId = String(readPayload && readPayload.staff && readPayload.staff.lineUserId || "");
-    if (!lineUserId || users.some(function (user) { return user && user.id === lineUserId; })) return users;
-    var current = safeGlobal("currentUserObj") || {};
-    return users.concat([{
+  function userToLegacy(user) {
+    var lineUserId = String(user && user.lineUserId || "");
+    if (!lineUserId) return null;
+    return {
       id: lineUserId,
-      name: String(readPayload.staff.name || current.name || "あなた"),
-      stores: Array.isArray(current.stores) ? current.stores : [],
-      is_boss: current.is_boss === true,
-      is_core: current.is_core === true
-    }]);
+      name: String(user.name || ""),
+      stores: Array.isArray(user.stores) ? user.stores.map(String) : [],
+      is_boss: user.isBoss === true,
+      is_core: user.isCore === true
+    };
   }
 
-  function buildPureReadBody(config, readPayload) {
-    var from = String(config.readDirectOnlyFrom);
-    var to = String(config.readDirectOnlyTo);
-    var lineUserId = String(readPayload && readPayload.staff && readPayload.staff.lineUserId || "");
-    var cachedShifts = readJsonArray("cached_shifts");
-    var retained = cachedShifts.filter(function (row) {
-      if (!row || String(row.user_id || "") !== lineUserId) return true;
-      var date = String(row.date || "").replace(/\//g, "-").split("T")[0];
-      return date < from || date > to;
-    });
-    var canonical = (Array.isArray(readPayload && readPayload.shifts) ? readPayload.shifts : [])
-      .filter(function (shift) {
-        var date = String(shift && shift.date || "");
-        return date >= from && date <= to;
-      })
-      .map(function (shift) { return canonicalToLegacy(shift, readPayload); })
+  function buildFullReadBody(readPayload) {
+    if (!readPayload || readPayload.readMode !== "full_pure") {
+      throw new Error("Shift full pure read contract mismatch");
+    }
+    var users = (Array.isArray(readPayload.users) ? readPayload.users : [])
+      .map(userToLegacy)
       .filter(Boolean);
-    var users = ensureCurrentUser(readJsonArray("cached_users"), readPayload);
-    return { shifts: retained.concat(canonical), users: users };
+    var shifts = (Array.isArray(readPayload.shifts) ? readPayload.shifts : [])
+      .map(canonicalToLegacy)
+      .filter(Boolean);
+
+    if (!users.length) throw new Error("Shift full pure read returned no users");
+    return { shifts: shifts, users: users };
   }
 
   function cachedFallbackBody(config) {
@@ -170,7 +162,10 @@
       from: config && config.readDirectOnlyFrom || null,
       to: config && config.readDirectOnlyTo || null
     });
-    return { shifts: readJsonArray("cached_shifts"), users: readJsonArray("cached_users") };
+    return {
+      shifts: readJsonArray("cached_shifts"),
+      users: readJsonArray("cached_users")
+    };
   }
 
   function jsonResponse(body) {
@@ -188,10 +183,16 @@
     var wrappedFetch = async function (input, init) {
       if (!isLegacyGasReadRequest(input, init)) return previousFetch(input, init);
 
-      var accessToken = getAccessToken();
-      if (!accessToken) return previousFetch(input, init);
-
       var cachedConfig = readCachedConfig();
+      var accessToken = getAccessToken();
+      if (!accessToken) {
+        if (pureReadEnabled(cachedConfig)) {
+          recordDebug("pure_read_no_token", null);
+          return jsonResponse(cachedFallbackBody(cachedConfig));
+        }
+        return previousFetch(input, init);
+      }
+
       var config = cachedConfig;
       try {
         config = await refreshConfig(nativeFetch, accessToken);
@@ -204,18 +205,19 @@
       if (!pureReadEnabled(config)) return previousFetch(input, init);
 
       try {
-        var readResponse = await nativeFetch(READ_URL, {
+        var readResponse = await nativeFetch(FULL_READ_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ accessToken: accessToken })
         });
-        if (!readResponse.ok) throw new Error("Shift pure read HTTP " + readResponse.status);
+        if (!readResponse.ok) throw new Error("Shift full pure read HTTP " + readResponse.status);
         var readPayload = await readResponse.json();
-        var body = buildPureReadBody(config, readPayload);
-        recordDebug("pure_read_direct", {
+        var body = buildFullReadBody(readPayload);
+        recordDebug("pure_read_full_direct", {
           from: config.readDirectOnlyFrom,
           to: config.readDirectOnlyTo,
-          canonicalCount: Array.isArray(readPayload.shifts) ? readPayload.shifts.length : 0
+          userCount: body.users.length,
+          shiftCount: body.shifts.length
         });
         return jsonResponse(body);
       } catch (error) {
