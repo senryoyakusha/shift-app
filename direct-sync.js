@@ -1,10 +1,11 @@
 (function () {
   "use strict";
 
-  var BOOTSTRAP_VERSION = "2026-09-04.3";
+  var BOOTSTRAP_VERSION = "2026-09-04.4";
   var scripts = [
     "./direct-sync-core.js?v=" + encodeURIComponent(BOOTSTRAP_VERSION),
-    "./direct-recovery.js?v=" + encodeURIComponent(BOOTSTRAP_VERSION)
+    "./direct-recovery.js?v=" + encodeURIComponent(BOOTSTRAP_VERSION),
+    "./direct-status.js?v=" + encodeURIComponent(BOOTSTRAP_VERSION)
   ];
 
   function loadSequentially(index) {
