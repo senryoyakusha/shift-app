@@ -2,7 +2,7 @@
   "use strict";
 
   var OPERATIONS_URL = "https://os.senryoyakusha.com/api/shifts/line/operations";
-  var STATUS_VERSION = "2026-09-04.2";
+  var STATUS_VERSION = "2026-09-04.3";
   var hideTimer = null;
   var pendingStamp = null;
 
@@ -115,7 +115,10 @@
     if (!directOnlyContext()) return false;
     var replacement = legacyStatusReplacement(text);
     if (!replacement) return false;
-    setStatus(replacement.text, replacement.background, replacement.autoHide);
+    clearTimeout(hideTimer);
+    hideTimer = null;
+    var element = document.getElementById("saveStatus");
+    if (element) element.classList.remove("status-show");
     return true;
   }
 
