@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BOOTSTRAP_VERSION = "2026-09-04.8";
+  var BOOTSTRAP_VERSION = "2026-09-04.9";
   var scripts = [
     "./direct-sync-core.js?v=" + encodeURIComponent(BOOTSTRAP_VERSION),
     "./direct-recovery.js?v=" + encodeURIComponent(BOOTSTRAP_VERSION),
