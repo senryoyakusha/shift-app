@@ -19,5 +19,7 @@
     (document.head || document.documentElement).appendChild(script);
   }
 
+  // direct-sync.js is loaded after the legacy inline app source. Dynamic
+  // sequential loading is safe here and avoids document.write parser hazards.
   loadSequentially(0);
 })();
