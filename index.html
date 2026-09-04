@@ -9,7 +9,8 @@
     <style>
         :root { 
             --main-red: #ff5a5f; --bg-gray: #f8f8f8; 
-            --annee-g1: #e76f51; --annee-g2: #f4a261; 
+            --annee-g1: #9a7b55; --annee-g2: #c2a982; 
+            --aulne-g1: #8c4a3c; --aulne-g2: #c47f6d; 
             --yoki-g1: #1d3557;  --yoki-g2: #457b9d;  
             --common-color: #2a9d8f; 
         }
@@ -441,7 +442,7 @@
             const targetDiv = document.querySelector(`.day[data-date="${shift.date}"] .shift-area`);
             if (targetDiv) {
                 let displayLabel = shift.shift_label;
-                displayLabel = displayLabel.replace(/^(annee|yoki\.)(\d{4})$/, "$1<br>$2");
+                displayLabel = displayLabel.replace(/^(annee|yoki\.|aulne)(\d{4})$/, "$1<br>$2");
                 targetDiv.innerHTML = `<span class="shift-badge" style="background:${shift.color}">${displayLabel}</span>`;
             }
             const monthKey = shift.date.substring(0, 7);
@@ -501,7 +502,7 @@
                 const shift = globalShiftData.find(item => item.user_id === u.id && item.date === isoDate && (item.store === currentStore || item.store === 'common'));
                 let cellHtml = "<td></td>";
                 if (shift) {
-                    cellHtml = `<td><span class="shift-badge" style="background:${shift.color}; max-width: 45px; margin:0 auto; font-size:0.6rem;">${shift.shift_label.replace('annee','').replace('yoki.','')}</span></td>`;
+                    cellHtml = `<td><span class="shift-badge" style="background:${shift.color}; max-width: 45px; margin:0 auto; font-size:0.6rem;">${shift.store === 'common' ? shift.shift_label : shift.shift_label.replace(currentStore, '')}</span></td>`;
                     if (shift.store !== 'common') {
                         let match = shift.shift_label.match(/(\d{2})(\d{2})/);
                         if (match) {
@@ -515,10 +516,11 @@
             let maxCount = Math.max(...hourlyCounts);
             let rowClass = "";
 
-            if (currentStore === 'yoki.') {
-                rowClass = (maxCount >= 5) ? "row-over" : "row-short";
-            } else {
-                rowClass = (maxCount >= 5) ? "row-over" : (maxCount <= 3 ? "row-short" : "");
+            const seatCount = typeof window.shiftSeatCountForStore === 'function'
+                ? window.shiftSeatCountForStore(currentStore)
+                : null;
+            if (Number.isFinite(seatCount) && seatCount > 0) {
+                rowClass = maxCount > seatCount ? "row-over" : (maxCount < seatCount ? "row-short" : "");
             }
 
             let dateClass = "date-col" + (dayOfWeek === 0 ? " sun" : (dayOfWeek === 6 ? " sat" : "")) + (globalHolidays[isoDate] ? " holiday" : "");
@@ -777,6 +779,6 @@
         }
     }
 </script>
-<script src="./direct-sync.js?v=2026-09-04.9"></script>
+<script src="./direct-sync.js?v=2026-09-04.10"></script>
 </body>
 </html>
