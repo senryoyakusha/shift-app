@@ -3,23 +3,18 @@
 
   var CONFIG_URL = "https://os.senryoyakusha.com/api/shifts/line/config";
   var OPERATIONS_URL = "https://os.senryoyakusha.com/api/shifts/line/operations";
-  var READ_URL = "https://os.senryoyakusha.com/api/shifts/line/read";
-  var LEGACY_GAS_URL_FALLBACK = "https://script.google.com/macros/s/AKfycbz3Cnb2C_o8xjb9I_I_0jfgNXMhmo_TzcLh76MQ8FqYg9lYRx3VdEo4OdNVxpJO2fYl/exec";
   var DB_NAME = "senryoyakusha-shift-v2";
   var DB_VERSION = 1;
   var STORE_NAME = "lineOperations";
   var MAX_BATCH = 30;
   var RETRY_DELAY_MS = 2500;
-  var ADAPTER_VERSION = "2026-09-03.4";
-  var DIRECT_MARKER_ID = "__shiftV2DirectOperationId";
-  var DIRECT_MARKER_FINGERPRINT = "__shiftV2DirectFingerprint";
+  var ADAPTER_VERSION = "2026-09-24.1";
 
   var state = {
     config: null,
     directRunning: false,
     directTimer: null,
     configLoading: false,
-    legacyProcessBatchSave: null,
     pendingStampClick: null
   };
 
@@ -28,14 +23,6 @@
       return Function("return typeof " + name + " !== 'undefined' ? " + name + " : undefined")();
     } catch (_) {
       return undefined;
-    }
-  }
-
-  function writeGlobal(name, value) {
-    try {
-      Function("value", name + " = value")(value);
-    } catch (_) {
-      try { window[name] = value; } catch (_) {}
     }
   }
 
@@ -97,18 +84,6 @@
     } catch (_) {
       return null;
     }
-  }
-
-  function rememberVersions(shifts) {
-    try {
-      var versions = JSON.parse(localStorage.getItem("shift_v2_versions") || "{}");
-      (Array.isArray(shifts) ? shifts : []).forEach(function (shift) {
-        if (shift && shift.date && Number.isInteger(Number(shift.version))) {
-          versions[shift.date] = Number(shift.version);
-        }
-      });
-      localStorage.setItem("shift_v2_versions", JSON.stringify(versions));
-    } catch (_) {}
   }
 
   function openDb() {
@@ -329,155 +304,6 @@
     return null;
   }
 
-  function legacyItemFingerprint(item) {
-    if (!item) return "";
-    return JSON.stringify([
-      String(item.date || ""),
-      String(item.shift_label || ""),
-      String(item.store || "")
-    ]);
-  }
-
-  function markLegacyItemDurable(date, operationId) {
-    try {
-      var queue = safeGlobal("pendingQueue");
-      if (!Array.isArray(queue)) return false;
-      var marked = false;
-      queue.forEach(function (item) {
-        if (!item || item.date !== date) return;
-        item[DIRECT_MARKER_ID] = operationId;
-        item[DIRECT_MARKER_FINGERPRINT] = legacyItemFingerprint(item);
-        marked = true;
-      });
-      if (marked) {
-        writeGlobal("pendingQueue", queue);
-        localStorage.setItem("shift_backup", JSON.stringify(queue));
-      }
-      return marked;
-    } catch (error) {
-      console.warn("Shift v2 could not mark legacy queue item as durable", error);
-      return false;
-    }
-  }
-
-  function hasDurableDirectMarker(item) {
-    return Boolean(
-      item
-      && typeof item[DIRECT_MARKER_ID] === "string"
-      && item[DIRECT_MARKER_ID]
-      && item[DIRECT_MARKER_FINGERPRINT] === legacyItemFingerprint(item)
-    );
-  }
-
-  function legacyGasUrl() {
-    var configured = safeGlobal("GAS_URL");
-    return typeof configured === "string" && configured ? configured : LEGACY_GAS_URL_FALLBACK;
-  }
-
-  function requestUrl(input) {
-    if (typeof input === "string") return input;
-    if (input && typeof input.url === "string") return input.url;
-    return "";
-  }
-
-  function isLegacyGasReadRequest(input, init) {
-    var method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
-    return method === "GET" && requestUrl(input) === legacyGasUrl();
-  }
-
-  function legacyResponse(body, response) {
-    return new Response(JSON.stringify(body), {
-      status: response && response.status ? response.status : 200,
-      statusText: response && response.statusText ? response.statusText : "OK",
-      headers: { "Content-Type": "application/json" }
-    });
-  }
-
-  function canonicalShiftLabel(shift) {
-    var shiftType = String(shift && shift.shiftType || "");
-    if (shiftType === "off") return "休み";
-    if (shiftType === "requested_off") return "希望休";
-    if (shiftType === "adjustment_off") return "調整休み";
-    if (shiftType === "workday") return "作業日";
-    if (shiftType !== "work") return "";
-
-    var storeName = String(shift.storeName || "");
-    var start = String(shift.startTime || "").slice(0, 2);
-    var end = String(shift.endTime || "").slice(0, 2);
-    if (!storeName || !/^\d{2}$/.test(start) || !/^\d{2}$/.test(end)) return "";
-    return storeName + start + end;
-  }
-
-  function canonicalShiftColor(shift) {
-    if (!shift || shift.shiftType !== "work") return "var(--common-color)";
-    var storeName = String(shift.storeName || "");
-    var longShift = Number(shift.workHours || 0) >= 5.5;
-    if (storeName === "annee") return longShift ? "var(--annee-g1)" : "var(--annee-g2)";
-    if (storeName === "yoki.") return longShift ? "var(--yoki-g1)" : "var(--yoki-g2)";
-    return "var(--common-color)";
-  }
-
-  function canonicalShiftToLegacy(shift, readPayload) {
-    var label = canonicalShiftLabel(shift);
-    if (!label) return null;
-    var workHours = Number(shift.workHours || 0);
-    var store = shift.shiftType === "work" ? String(shift.storeName || "") : "common";
-    var attendanceScore = shift.shiftType === "work"
-      ? (workHours >= 5.5 ? 1 : (workHours > 0 ? 0.5 : 0))
-      : 0;
-    return {
-      user_id: readPayload.staff.lineUserId,
-      user_name: readPayload.staff.name || "あなた",
-      date: shift.date,
-      shift_label: label,
-      color: canonicalShiftColor(shift),
-      store: store,
-      work_hours: workHours,
-      attendance_score: attendanceScore
-    };
-  }
-
-  function mergeCanonicalSelfRead(legacyPayload, readPayload) {
-    if (
-      !readPayload
-      || !readPayload.ok
-      || !readPayload.staff
-      || !readPayload.scope
-      || !readPayload.staff.lineUserId
-      || !readPayload.scope.allowedFrom
-      || !readPayload.scope.allowedTo
-    ) return legacyPayload;
-
-    var legacyShifts = Array.isArray(legacyPayload)
-      ? legacyPayload
-      : (Array.isArray(legacyPayload && legacyPayload.shifts) ? legacyPayload.shifts : []);
-    var users = Array.isArray(legacyPayload && legacyPayload.users) ? legacyPayload.users : [];
-    var lineUserId = String(readPayload.staff.lineUserId);
-    var from = String(readPayload.scope.allowedFrom);
-    var to = String(readPayload.scope.allowedTo);
-    var canonicalRows = (Array.isArray(readPayload.shifts) ? readPayload.shifts : [])
-      .map(function (shift) { return canonicalShiftToLegacy(shift, readPayload); })
-      .filter(Boolean);
-
-    rememberVersions(readPayload.shifts || []);
-
-    var merged = legacyShifts.filter(function (row) {
-      if (!row || String(row.user_id || "") !== lineUserId) return true;
-      var date = String(row.date || "").replace(/\//g, "-").split("T")[0];
-      return date < from || date > to;
-    }).concat(canonicalRows);
-
-    recordDebug("read_overlay", {
-      from: from,
-      to: to,
-      canonicalCount: canonicalRows.length,
-      legacyCount: legacyShifts.length,
-      mergedCount: merged.length
-    });
-
-    return { shifts: merged, users: users };
-  }
-
   async function captureCommittedStamp(intent) {
     if (!intent || !intent.date) return;
     var after = readCachedRow(intent.date);
@@ -518,14 +344,17 @@
     }
 
     try {
+      var recovery = window.ShiftV2DirectRecovery;
+      if (recovery && typeof recovery.coalesceOperation === "function") {
+        operation = recovery.coalesceOperation(operation);
+      }
       await putLatest(operation);
-      var legacyMarked = markLegacyItemDurable(intent.date, operation.operationId);
       recordDebug("stamp_queued", {
         date: intent.date,
+        operationId: operation.operationId,
         operationKind: operation.operationKind,
         shiftType: operation.shiftType || null,
-        storeKey: operation.storeKey || null,
-        legacyMarked: legacyMarked
+        storeKey: operation.storeKey || null
       });
       scheduleDrain(50);
     } catch (error) {
@@ -589,7 +418,7 @@
       var payload = await response.json();
       state.config = payload && payload.config
         ? payload.config
-        : { enabled: false, writeMode: "dual_write" };
+        : { enabled: false, writeMode: "direct_only" };
       localStorage.setItem("shift_v2_direct_config", JSON.stringify({
         value: state.config,
         cachedAt: Date.now()
@@ -599,18 +428,12 @@
         enabled: state.config.enabled === true,
         allowedFrom: state.config.allowedFrom || null,
         allowedTo: state.config.allowedTo || null,
-        writeMode: state.config.writeMode || "dual_write"
+        writeMode: state.config.writeMode || "direct_only"
       });
       scheduleDrain(0);
       return state.config;
     } catch (error) {
-      console.warn("Shift v2 direct config unavailable; keeping legacy save path", error);
-      state.config = {
-        enabled: false,
-        allowedFrom: null,
-        allowedTo: null,
-        writeMode: "dual_write"
-      };
+      console.warn("Shift v2 direct config unavailable; queued writes stay local until retry", error);
       recordDebug("config_error", {
         message: error && error.message ? error.message : String(error)
       });
@@ -638,21 +461,6 @@
     state.directTimer = setTimeout(function () {
       drainDirectQueue();
     }, delay == null ? 800 : delay);
-  }
-
-  function removeLegacyDates(dates) {
-    if (!dates.size) return;
-    try {
-      var queue = safeGlobal("pendingQueue");
-      if (!Array.isArray(queue)) return;
-      var filtered = queue.filter(function (item) {
-        return !dates.has(item.date);
-      });
-      writeGlobal("pendingQueue", filtered);
-      localStorage.setItem("shift_backup", JSON.stringify(filtered));
-    } catch (error) {
-      console.warn("Shift v2 could not prune legacy queue", error);
-    }
   }
 
   async function drainDirectQueue() {
@@ -733,16 +541,6 @@
 
         await removeOperations(acknowledged);
 
-        var ackSet = new Set(acknowledged);
-        var acknowledgedBatch = batch.filter(function (op) {
-          return ackSet.has(op.operationId);
-        });
-        if (state.config.writeMode === "direct_only") {
-          removeLegacyDates(new Set(acknowledgedBatch.map(function (op) {
-            return op.date;
-          })));
-        }
-
         try {
           var versions = JSON.parse(localStorage.getItem("shift_v2_versions") || "{}");
           (result.results || []).forEach(function (row) {
@@ -763,121 +561,6 @@
     }
   }
 
-  function wrapLegacySave() {
-    var legacy = safeGlobal("processBatchSave") || window.processBatchSave;
-    if (typeof legacy !== "function") return false;
-    if (legacy.__shiftV2Wrapped) return true;
-    state.legacyProcessBatchSave = legacy;
-
-    var wrapped = async function () {
-      var queue = safeGlobal("pendingQueue");
-      if (!Array.isArray(queue) || !queue.length) {
-        return legacy.apply(this, arguments);
-      }
-
-      if (!state.config) await loadConfig();
-
-      if (
-        state.config
-        && state.config.enabled === true
-        && state.config.writeMode === "direct_only"
-      ) {
-        var suppressibleDates = new Set(
-          queue
-            .filter(function (item) {
-              return item && isDirectDate(item.date) && hasDurableDirectMarker(item);
-            })
-            .map(function (item) { return item.date; })
-        );
-
-        if (suppressibleDates.size) {
-          var legacyItems = queue.filter(function (item) {
-            return !item || !suppressibleDates.has(item.date);
-          });
-          writeGlobal("pendingQueue", legacyItems);
-          localStorage.setItem("shift_backup", JSON.stringify(legacyItems));
-          scheduleDrain(0);
-          recordDebug("direct_only_legacy_suppressed", {
-            count: queue.length - legacyItems.length,
-            fallbackCount: legacyItems.filter(function (item) {
-              return item && isDirectDate(item.date);
-            }).length
-          });
-          if (!legacyItems.length) return;
-        } else {
-          recordDebug("direct_only_legacy_fallback", {
-            count: queue.filter(function (item) {
-              return item && isDirectDate(item.date);
-            }).length
-          });
-        }
-      }
-
-      return legacy.apply(this, arguments);
-    };
-    wrapped.__shiftV2Wrapped = true;
-    writeGlobal("processBatchSave", wrapped);
-    window.processBatchSave = wrapped;
-    return true;
-  }
-
-  function installLegacySaveWrapper() {
-    var saveOk = wrapLegacySave();
-    if (!saveOk) setTimeout(installLegacySaveWrapper, 250);
-  }
-
-  function installReadBridge() {
-    if (window.fetch && window.fetch.__shiftV2ReadWrapped) return;
-    var nativeFetch = window.fetch.bind(window);
-    var wrappedFetch = function (input, init) {
-      if (!isLegacyGasReadRequest(input, init)) return nativeFetch(input, init);
-
-      var legacyPromise = nativeFetch(input, init);
-      var accessToken = getAccessToken();
-      if (!accessToken) return legacyPromise;
-
-      var configPromise = state.config ? Promise.resolve(state.config) : loadConfig();
-      return Promise.all([
-        legacyPromise.then(function (response) {
-          return response.json().then(function (body) {
-            return { response: response, body: body };
-          });
-        }),
-        configPromise.then(function (config) {
-          if (!config || config.enabled !== true) return null;
-          return nativeFetch(READ_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ accessToken: accessToken })
-          }).then(function (response) {
-            if (!response.ok) {
-              recordDebug("read_rejected", { status: response.status });
-              return null;
-            }
-            return response.json();
-          });
-        }).catch(function (error) {
-          recordDebug("read_config_error", {
-            message: error && error.message ? error.message : String(error)
-          });
-          return null;
-        })
-      ]).then(function (parts) {
-        var legacy = parts[0];
-        var directRead = parts[1];
-        var merged = directRead ? mergeCanonicalSelfRead(legacy.body, directRead) : legacy.body;
-        return legacyResponse(merged, legacy.response);
-      }).catch(function (error) {
-        recordDebug("read_bridge_error", {
-          message: error && error.message ? error.message : String(error)
-        });
-        return legacyPromise;
-      });
-    };
-    wrappedFetch.__shiftV2ReadWrapped = true;
-    window.fetch = wrappedFetch;
-  }
-
   function waitForLiff() {
     var attempts = 0;
     var timer = setInterval(function () {
@@ -894,9 +577,7 @@
   }
 
   restoreCachedConfig();
-  installReadBridge();
   installStampCapture();
-  installLegacySaveWrapper();
   waitForLiff();
 
   window.addEventListener("online", function () {
