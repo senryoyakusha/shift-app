@@ -2,17 +2,9 @@
   "use strict";
 
   var OPERATIONS_URL = "https://os.senryoyakusha.com/api/shifts/line/operations";
-  var STATUS_VERSION = "2026-09-04.3";
+  var STATUS_VERSION = "2026-09-24.1";
   var hideTimer = null;
   var pendingStamp = null;
-
-  function safeGlobal(name) {
-    try {
-      return Function("return typeof " + name + " !== 'undefined' ? " + name + " : undefined")();
-    } catch (_) {
-      return undefined;
-    }
-  }
 
   function cachedConfig() {
     try {
@@ -54,32 +46,14 @@
     return true;
   }
 
-  function directOnlyOwnsDate(date) {
-    if (!date || !isDirectOnlyDate(date)) return false;
-    var directSync = window.ShiftV2DirectSync;
-    if (directSync && typeof directSync.isDirectDate === "function") {
-      return directSync.isDirectDate(date) === true;
-    }
-    return true;
-  }
-
   function activeDateFromDom() {
     var active = document.querySelector(".day.active-focus[data-date]");
     if (active && active.getAttribute("data-date")) return active.getAttribute("data-date");
-    var fallback = safeGlobal("activeDateString");
-    return typeof fallback === "string" && fallback ? fallback : null;
-  }
-
-  function directOnlyContext() {
-    var activeDate = activeDateFromDom();
-    if (activeDate && directOnlyOwnsDate(activeDate)) return true;
-
-    var queue = safeGlobal("pendingQueue");
-    if (!Array.isArray(queue) || queue.length === 0) return false;
-    var dates = queue
-      .map(function (item) { return item && typeof item.date === "string" ? item.date : null; })
-      .filter(Boolean);
-    return dates.length > 0 && dates.every(directOnlyOwnsDate);
+    try {
+      return typeof activeDateString === "string" && activeDateString ? activeDateString : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   function setStatus(text, background, autoHide) {
@@ -97,71 +71,12 @@
     }
   }
 
-  function legacyStatusReplacement(text) {
-    var value = String(text || "");
-    if (value.indexOf("更新ボタン") >= 0 || value.indexOf("更新失敗") >= 0 || value.indexOf("混雑中") >= 0) {
-      return { text: "⚠️ 未同期・再送中", background: "rgba(243,156,18,0.9)", autoHide: false };
-    }
-    if (value.indexOf("保存完了") >= 0) {
-      return { text: "✅ 同期済み", background: "rgba(42,157,143,0.9)", autoHide: true };
-    }
-    if (value.indexOf("保存中") >= 0 || value.indexOf("送信中") >= 0) {
-      return { text: "🔄 同期中...", background: "rgba(0,0,0,0.8)", autoHide: false };
-    }
-    return null;
+  function setRetrying() {
+    setStatus("🔄 再同期中...", "rgba(243,156,18,0.9)", false);
   }
 
-  function normalizeLegacyStatus(text) {
-    if (!directOnlyContext()) return false;
-    var replacement = legacyStatusReplacement(text);
-    if (!replacement) return false;
-    clearTimeout(hideTimer);
-    hideTimer = null;
-    var element = document.getElementById("saveStatus");
-    if (element) element.classList.remove("status-show");
-    return true;
-  }
-
-  function installLegacyStatusGuard() {
-    var legacyShowSaveStatus = window.showSaveStatus;
-    if (typeof legacyShowSaveStatus === "function" && !legacyShowSaveStatus.__shiftV2LegacyStatusGuard) {
-      var guarded = function (text, background, autoHide) {
-        if (normalizeLegacyStatus(text)) return;
-        return legacyShowSaveStatus.apply(this, arguments);
-      };
-      guarded.__shiftV2LegacyStatusGuard = true;
-      window.showSaveStatus = guarded;
-    }
-
-    function normalizeVisibleLegacyStatus() {
-      var element = document.getElementById("saveStatus");
-      if (element) normalizeLegacyStatus(element.innerText);
-    }
-
-    normalizeVisibleLegacyStatus();
-    setTimeout(normalizeVisibleLegacyStatus, 300);
-    setTimeout(normalizeVisibleLegacyStatus, 1200);
-  }
-
-  function requestUrl(input) {
-    if (typeof input === "string") return input;
-    if (input && typeof input.url === "string") return input.url;
-    return "";
-  }
-
-  function parseRequestOperations(init) {
-    try {
-      var body = JSON.parse((init && init.body) || "{}");
-      return Array.isArray(body.operations) ? body.operations : [];
-    } catch (_) {
-      return [];
-    }
-  }
-
-  function requestTouchesDirectOnly(operations) {
-    return operations.some(function (operation) {
-      return operation && typeof operation.date === "string" && isDirectOnlyDate(operation.date);
-    });
+  function setFailed() {
+    setStatus("❌ 同期できませんでした", "rgba(231,76,60,0.9)", false);
   }
 
   function installStampStatus() {
@@ -191,9 +106,31 @@
     }, false);
   }
 
+  function requestUrl(input) {
+    if (typeof input === "string") return input;
+    if (input && typeof input.url === "string") return input.url;
+    return "";
+  }
+
+  function parseRequestOperations(init) {
+    try {
+      var body = JSON.parse((init && init.body) || "{}");
+      return Array.isArray(body.operations) ? body.operations : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function requestTouchesDirectOnly(operations) {
+    return operations.some(function (operation) {
+      return operation && typeof operation.date === "string" && isDirectOnlyDate(operation.date);
+    });
+  }
+
   function installOperationStatus() {
     if (!window.fetch || window.fetch.__shiftV2StatusWrapped) return;
     var previousFetch = window.fetch.bind(window);
+
     var wrappedFetch = function (input, init) {
       var url = requestUrl(input);
       var method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
@@ -207,8 +144,16 @@
 
       return previousFetch(input, init).then(function (response) {
         if (!directOnly) return response;
-        if (!response || !response.ok || typeof response.clone !== "function") {
-          setStatus("⚠️ 未同期・再送中", "rgba(243,156,18,0.9)", false);
+
+        if (!response || !response.ok) {
+          var status = response && Number(response.status);
+          if (status === 429 || status >= 500 || !status) setRetrying();
+          else setFailed();
+          return response;
+        }
+
+        if (typeof response.clone !== "function") {
+          setRetrying();
           return response;
         }
 
@@ -220,14 +165,15 @@
           if (acknowledged.length > 0) {
             setStatus("✅ 同期済み", "rgba(42,157,143,0.9)", true);
           } else {
-            setStatus("⚠️ 未同期・再送中", "rgba(243,156,18,0.9)", false);
+            setRetrying();
           }
         }).catch(function () {
-          setStatus("⚠️ 未同期・再送中", "rgba(243,156,18,0.9)", false);
+          setRetrying();
         });
+
         return response;
       }).catch(function (error) {
-        if (directOnly) setStatus("⚠️ 未同期・再送中", "rgba(243,156,18,0.9)", false);
+        if (directOnly) setRetrying();
         throw error;
       });
     };
@@ -236,7 +182,6 @@
     window.fetch = wrappedFetch;
   }
 
-  installLegacyStatusGuard();
   installStampStatus();
   installOperationStatus();
 

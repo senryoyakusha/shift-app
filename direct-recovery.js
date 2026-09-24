@@ -3,12 +3,10 @@
 
   var OPERATIONS_URL = "https://os.senryoyakusha.com/api/shifts/line/operations";
   var JOURNAL_KEY = "shift_v2_direct_journal_v1";
-  var RECOVERY_VERSION = "2026-09-04.2";
+  var RECOVERY_VERSION = "2026-09-24.1";
   var RECOVERY_DELAY_MS = 5000;
   var RETRY_DELAY_MS = 2500;
   var MAX_BATCH = 30;
-  var DIRECT_MARKER_ID = "__shiftV2DirectOperationId";
-  var DIRECT_MARKER_FINGERPRINT = "__shiftV2DirectFingerprint";
 
   var state = {
     pendingStampClick: null,
@@ -350,27 +348,21 @@
     }, delay == null ? RECOVERY_DELAY_MS : delay);
   }
 
-  function adoptCoreMarker(date, expectedOperation) {
-    try {
-      var backup = JSON.parse(localStorage.getItem("shift_backup") || "[]");
-      if (!Array.isArray(backup)) return;
-      var item = backup.find(function (row) { return row && row.date === date; });
-      if (!item || typeof item[DIRECT_MARKER_ID] !== "string" || !item[DIRECT_MARKER_ID]) return;
-      if (item[DIRECT_MARKER_FINGERPRINT] !== JSON.stringify([
-        String(item.date || ""),
-        String(item.shift_label || ""),
-        String(item.store || "")
-      ])) return;
+  function coalesceOperation(operation) {
+    if (!operation || !operation.shiftKey) return operation;
+    var lineUserId = currentLineUserId();
+    if (!lineUserId) return operation;
 
-      var lineUserId = currentLineUserId();
-      if (!lineUserId) return;
-      var root = readJournalRoot();
-      var entries = userEntries(root, lineUserId, false);
-      var current = entries && entries[date + ":1"];
-      if (!current || !sameDesiredState(current, expectedOperation)) return;
-      current.operationId = item[DIRECT_MARKER_ID];
-      saveJournalRoot(root);
-    } catch (_) {}
+    var entries = userEntries(readJournalRoot(), lineUserId, false);
+    var journalOperation = entries && entries[operation.shiftKey];
+    if (!journalOperation || !sameDesiredState(journalOperation, operation)) return operation;
+
+    return Object.assign({}, operation, {
+      operationId: journalOperation.operationId,
+      baseVersion: journalOperation.baseVersion,
+      clientCreatedAt: journalOperation.clientCreatedAt,
+      retryCount: Number(journalOperation.retryCount || 0)
+    });
   }
 
   function installStampJournalCapture() {
@@ -410,7 +402,6 @@
         // Intentionally synchronous inside the click task: the journal commit
         // completes before control returns to the LIFF/WebView host.
         persistJournal(lineUserId, operation);
-        setTimeout(function () { adoptCoreMarker(intent.date, operation); }, 75);
         scheduleRecovery(RECOVERY_DELAY_MS);
       } catch (error) {
         console.warn("Shift v2 recovery journal capture failed", error);
@@ -449,6 +440,7 @@
   window.ShiftV2DirectRecovery = {
     version: RECOVERY_VERSION,
     recoverNow: recoverJournal,
-    journalCount: journalCount
+    journalCount: journalCount,
+    coalesceOperation: coalesceOperation
   };
 })();

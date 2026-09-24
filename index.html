@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>シフト管理</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-    <script src="https://accounts.google.com/gsi/client"></script>
     <style>
         :root { 
             --main-red: #ff5a5f; --bg-gray: #f8f8f8; 
@@ -124,7 +123,7 @@
     </style>
 </head>
 <body>
-<div id="saveStatus">🔄 保存中...</div>
+<div id="saveStatus">🔄 同期中...</div>
 <header>
     <div style="font-weight:bold;">
         <img src="logo.png" alt="Logo" style="height: 80px; object-fit: contain; vertical-align: middle;">
@@ -206,30 +205,14 @@
 <div id="settingsOverlay">
     <div class="settings-content">
         <button class="close-settings" onclick="closeSettings()">×</button>
-        <div class="settings-header">📅 Googleカレンダー連携</div>
-        <div class="settings-desc">
-            ここにGoogleアカウントで連携しておくと、シフトを入力した瞬間に自動で自分のカレンダーに追加されます。<br>
-            <b>※最初の1回だけでOKです！永久に自動同期されます！</b>
-        </div>
-        <button type="button" onclick="loginGoogle()" style="padding:12px; background:#4285F4; color:white; border:none; border-radius:8px; width:100%; font-weight:bold; font-size:1rem; margin-bottom:15px; cursor:pointer;">
-            Googleカレンダーを連携する
-        </button>
-
-        <div class="settings-radio">
-            <label><input type="radio" name="sync_mode" value="all" id="syncAll"> すべてのシフトを連携する</label>
-            <label><input type="radio" name="sync_mode" value="common" id="syncCommon"> 休み・作業日など共通のみ連携</label>
-        </div>
-        
+        <div class="settings-header">設定</div>
         <button class="btn-generate" onclick="resetCustomStamps()" style="background:#999; margin-bottom:10px;">🗑 マイスタンプをリセット</button>
-        <button class="btn-generate" onclick="clearPendingQueue()" style="background:#e74c3c; margin-bottom:15px;">⚠️ 通信エラーの詰まりを強制リセット</button>
-        <button class="btn-generate" onclick="saveSettings()">設定を閉じる</button>
+        <button class="btn-generate" onclick="closeSettings()">閉じる</button>
     </div>
 </div>
 
 <script>
     const LIFF_ID = "2009130838-xQhedkHz";
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbz3Cnb2C_o8xjb9I_I_0jfgNXMhmo_TzcLh76MQ8FqYg9lYRx3VdEo4OdNVxpJO2fYl/exec";
-
     let CURRENT_USER_ID = localStorage.getItem('shift_app_user_id') || "";
     let currentUserObj = { id: "", name: "あなた", stores: ['annee', 'yoki.'], is_boss: true, is_core: true };
 
@@ -238,32 +221,10 @@
     
     let globalShiftData = JSON.parse(localStorage.getItem('cached_shifts')) || [];
     let globalUsersData = JSON.parse(localStorage.getItem('cached_users')) || [];
-    let syncMode = localStorage.getItem('shift_app_sync_mode') || 'all';
-    
     let activeDayElement = null;
     let activeDateString = "";
     let globalHolidays = {};
-    let pendingQueue = JSON.parse(localStorage.getItem('shift_backup')) || [];
-    let saveTimer = null;
     let myCustomStamps = JSON.parse(localStorage.getItem('my_custom_stamps')) || [];
-    let isSaving = false;
-
-    function loginGoogle() {
-        if (!CURRENT_USER_ID) {
-            alert("ユーザー情報を取得中です。数秒待ってからもう一度押してください。");
-            return;
-        }
-        const clientId = "1064442899084-tnm7c9h1nn1heosf6uku6a7kamj1qt8b.apps.googleusercontent.com";
-        const redirectUri = GAS_URL; 
-        const scope = encodeURIComponent("https://www.googleapis.com/auth/calendar.events");
-        const state = CURRENT_USER_ID; 
-        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${state}`;
-        if (liff.isInClient()) {
-            liff.openWindow({ url: authUrl, external: true });
-        } else {
-            window.open(authUrl, '_blank');
-        }
-    }
 
     window.onload = function() {
         renderAllPersonalCalendars(); 
@@ -273,11 +234,6 @@
         }
         fetchHolidays(); 
         initializeLiff(); 
-
-        if (pendingQueue.length > 0) {
-            showSaveStatus("🔄 前回の未保存データを送信中...", "rgba(243, 156, 18, 0.9)");
-            processBatchSave();
-        }
     };
 
     function fetchHolidays() {
@@ -315,13 +271,13 @@
                     if(globalUsersData.length > 0) applyPermissions();
                     applyDataToPersonalCalendar();
                 }
-                fetchDataFromGas();
+                fetchCanonicalData();
             })
             .catch(err => {
                 console.error(err);
                 CURRENT_USER_ID = getFallbackUserId();
                 currentUserObj.id = CURRENT_USER_ID;
-                fetchDataFromGas();
+                fetchCanonicalData();
             });
     }
 
@@ -332,7 +288,7 @@
     }
 
     document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === 'visible' && CURRENT_USER_ID !== "") fetchDataFromGas();
+        if (document.visibilityState === 'visible' && CURRENT_USER_ID !== "") fetchCanonicalData();
     });
 
     function applyPermissions() {
@@ -374,53 +330,55 @@
     }
 
     function syncAndFetch() {
-        if (pendingQueue.length > 0) {
-            showSaveStatus("🔄 送信中...", "rgba(243, 156, 18, 0.9)");
-            processBatchSave(true);
-        } else {
-            fetchDataFromGas(true);
-        }
+        fetchCanonicalData(true);
     }
 
-    function fetchDataFromGas(forceUpdate = false) {
-        if (pendingQueue.length > 0 && !forceUpdate) return;
-        const loading = document.getElementById('loading');
-        if(globalShiftData.length === 0 || forceUpdate) loading.style.display = 'block'; 
+    function waitForCanonicalReader(attempt = 0) {
+        const reader = window.ShiftV2CanonicalRead;
+        if (reader && typeof reader.readFull === 'function') return Promise.resolve(reader);
+        if (attempt >= 40) return Promise.reject(new Error('Shift canonical reader is unavailable'));
+        return new Promise(resolve => setTimeout(resolve, 50))
+            .then(() => waitForCanonicalReader(attempt + 1));
+    }
 
-        fetch(GAS_URL)
-            .then(response => response.json())
+    function fetchCanonicalData(forceUpdate = false) {
+        const loading = document.getElementById('loading');
+        if (globalShiftData.length === 0 || forceUpdate) loading.style.display = 'block';
+
+        return waitForCanonicalReader()
+            .then(reader => reader.readFull())
             .then(data => {
-                if (pendingQueue.length > 0) {
-                    loading.style.display = 'none';
-                    return; 
-                }
-                const shifts = Array.isArray(data) ? data : (data.shifts || []);
-                globalUsersData = data.users || [];
-                
-                let tempShifts = shifts.map(item => {
+                const shifts = Array.isArray(data.shifts) ? data.shifts : [];
+                globalUsersData = Array.isArray(data.users) ? data.users : [];
+
+                const normalizedShifts = shifts.map(item => {
                     if (item.date) {
                         if (item.date.includes('T')) item.date = item.date.split('T')[0];
                         item.date = String(item.date).replace(/\//g, '-');
                     }
                     return item;
                 });
-                
+
                 const uniqueShifts = new Map();
-                tempShifts.forEach(item => {
+                normalizedShifts.forEach(item => {
                     const key = item.user_id + '_' + item.date;
                     uniqueShifts.set(key, item);
                 });
                 globalShiftData = Array.from(uniqueShifts.values());
-                
+
                 localStorage.setItem('cached_shifts', JSON.stringify(globalShiftData));
                 localStorage.setItem('cached_users', JSON.stringify(globalUsersData));
-                
-                applyPermissions(); 
+
+                applyPermissions();
                 applyDataToPersonalCalendar();
                 if (currentView === 'shared') renderSharedCalendars();
-                loading.style.display = 'none';
             })
-            .catch(err => { console.error(err); loading.style.display = 'none'; });
+            .catch(err => {
+                console.error('Shift canonical read failed; keeping local cache', err);
+            })
+            .finally(() => {
+                loading.style.display = 'none';
+            });
     }
 
     function calcShiftData(label) {
@@ -675,12 +633,6 @@
         }
         localStorage.setItem('cached_shifts', JSON.stringify(globalShiftData));
         applyDataToPersonalCalendar(); 
-        showSaveStatus("🔄 保存中...", "rgba(0,0,0,0.8)");
-        const newData = { user_id: CURRENT_USER_ID, user_name: currentUserObj.name, date: activeDateString, shift_label: label, color: color, store: store, sync_mode: syncMode };
-        const existingIdx = pendingQueue.findIndex(item => item.date === activeDateString);
-        if (existingIdx > -1) pendingQueue[existingIdx] = newData; else pendingQueue.push(newData);
-        localStorage.setItem('shift_backup', JSON.stringify(pendingQueue));
-        clearTimeout(saveTimer); saveTimer = setTimeout(() => { processBatchSave(); }, 800);
         let nextDateObj = new Date(activeDateString); nextDateObj.setDate(nextDateObj.getDate() + 1);
         const nextIso = `${nextDateObj.getFullYear()}-${('0' + (nextDateObj.getMonth() + 1)).slice(-2)}-${('0' + nextDateObj.getDate()).slice(-2)}`;
         const nextDayEl = document.querySelector(`.day[data-date="${nextIso}"]`);
@@ -690,33 +642,6 @@
             nextDayEl.closest('.calendar-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             openPalette(nextDayEl, `${y} / ${m} / ${d} (${dayOfWeek})`, nextIso);
         } else closePalette();
-    }
-
-    function processBatchSave(fetchAfter = false) {
-      if (pendingQueue.length === 0) { if (fetchAfter) fetchDataFromGas(true); return; }
-      if (isSaving) return;
-      isSaving = true;
-      const dataToSend = [...pendingQueue];
-      fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ type: 'BATCH_SAVE', payload: dataToSend }) })
-      .then(response => { if (!response.ok) throw new Error("Network Error"); return response.text(); })
-      .then(text => {
-        isSaving = false;
-        if (text === "Success" || text.includes("Success")) {
-          showSaveStatus("✅ 保存完了", "rgba(42, 157, 143, 0.9)", true);
-          pendingQueue = pendingQueue.filter(p => !dataToSend.includes(p));
-          localStorage.setItem('shift_backup', JSON.stringify(pendingQueue));
-          if (fetchAfter) fetchDataFromGas(true);
-        } else if (text.includes("Busy")) {
-          showSaveStatus("⏳ 混雑中。数秒待ってから押してください", "rgba(243, 156, 18, 0.9)", false);
-        } else { throw new Error("GAS Error"); }
-      })
-      .catch(err => { isSaving = false; console.error(err); showSaveStatus("❌ 更新ボタンを押してください", "rgba(231, 76, 60, 0.9)", false); });
-    }
-
-    function showSaveStatus(text, bg, autoHide = false) {
-        const statusEl = document.getElementById('saveStatus');
-        statusEl.innerText = text; statusEl.style.background = bg; statusEl.classList.add('status-show');
-        if (autoHide) setTimeout(() => { if (pendingQueue.length === 0) statusEl.classList.remove('status-show'); }, 2000);
     }
 
     function createCustomStamp(targetStore) {
@@ -755,30 +680,17 @@
     }
 
     function openSettings() {
-        if (syncMode === 'common') document.getElementById('syncCommon').checked = true;
-        else document.getElementById('syncAll').checked = true;
         document.getElementById('settingsOverlay').style.display = 'block';
     }
     function closeSettings() { document.getElementById('settingsOverlay').style.display = 'none'; }
-    function saveSettings() {
-        const mode = document.getElementById('syncCommon').checked ? 'common' : 'all';
-        localStorage.setItem('shift_app_sync_mode', mode); syncMode = mode;
-        alert('設定を保存しました！'); closeSettings();
-    }
     function resetCustomStamps() {
         if(confirm("作成したマイスタンプをすべてパレットから消去しますか？")) {
             myCustomStamps = []; localStorage.removeItem('my_custom_stamps');
             renderMyStamps(); alert("マイスタンプをリセットしました！");
         }
     }
-    function clearPendingQueue() {
-        if(confirm("※注意※\n未送信のシフトデータを破棄します。よろしいですか？")) {
-            pendingQueue = []; localStorage.removeItem('shift_backup');
-            document.getElementById('saveStatus').classList.remove('status-show');
-            alert("リセットしました！"); fetchDataFromGas(true);
-        }
-    }
+
 </script>
-<script src="./direct-sync.js?v=2026-09-04.13"></script>
+<script src="./direct-sync.js?v=2026-09-24.1"></script>
 </body>
 </html>
