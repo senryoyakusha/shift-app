@@ -146,6 +146,44 @@
     } finally { busy=false; }
   };
 
+  window.previewShiftPersonalCalendarReset = async function () {
+    if (busy) return;
+    busy = true;
+    try {
+      message('2026年10月以降の旧予定を読み取り専用で調査しています...');
+      const result = await post('/api/shifts/line/calendar/reconcile-preview', { scope: 'reset_2026_10' });
+      const inventory = result.inventory;
+      if (!inventory || inventory.readOnly !== true || inventory.safeToDelete !== false) {
+        throw new Error('調査結果を確認できませんでした。');
+      }
+      const issues = document.getElementById('shiftPersonalCalendarIssues');
+      if (issues) {
+        const sourceCounts = inventory.bySource || {};
+        const sourceText = Object.entries(sourceCounts)
+          .map(([source, count]) => source + ' ' + Number(count) + '件').join('、');
+        const lines = [
+          '対象期間 2026年10月1日以降',
+          'Supabaseシフト ' + inventory.canonicalShifts + '件（' + sourceText + '）',
+          '旧シフト予定の削除候補 ' + inventory.oldCandidates + '件',
+          '新OS管理予定 ' + inventory.osManaged + '件',
+          '要確認 ' + inventory.reviewRequired + '件',
+          '削除対象外の予定 ' + inventory.protectedEvents + '件',
+          '旧ID未発見 ' + inventory.missingLegacyIds + '件',
+          '※旧スプレッドシートにしかない予定IDは未照合。削除候補は全件確定していません',
+        ];
+        for (const issue of (inventory.issues || []).slice(0, 5)) {
+          lines.push(String(issue.date || '対象日不明') + '：確認が必要です');
+        }
+        issues.textContent = lines.join(' ／ ');
+      }
+      message('読み取り調査が完了しました。削除・登録・自動同期は一切実行していません。');
+    } catch (error) {
+      message(error instanceof Error ? error.message : '10月以降の調査ができませんでした。');
+    } finally {
+      busy = false;
+    }
+  };
+
   window.retryShiftPersonalCalendar = async function () {
     if (busy) return;
     busy=true;
