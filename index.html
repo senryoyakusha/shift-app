@@ -206,6 +206,21 @@
     <div class="settings-content">
         <button class="close-settings" onclick="closeSettings()">×</button>
         <div class="settings-header">設定</div>
+        <div style="padding: 12px; border: 1px solid #ddd; border-radius: 12px; margin-bottom: 12px;">
+            <div style="font-weight: bold; margin-bottom: 8px;">Googleカレンダー連携</div>
+            <label for="shiftPersonalCalendarMode" style="display:block; margin-bottom: 6px;">同期するシフト</label>
+            <select id="shiftPersonalCalendarMode" style="width:100%; padding:10px; margin-bottom:8px;">
+                <option value="all">すべてのシフト</option>
+                <option value="common">休み・作業日だけ</option>
+                <option value="none">同期しない</option>
+            </select>
+            <button class="btn-generate" onclick="saveShiftPersonalCalendarMode()" style="margin-bottom: 8px;">同期範囲を保存</button>
+            <button class="btn-generate" onclick="connectShiftPersonalCalendar()" style="margin-bottom: 8px;">個人Googleカレンダーを接続</button>
+            <div id="shiftPersonalCalendarStatus" role="status" aria-live="polite" style="font-size: 0.8rem; color: #555;">接続状態を確認します。</div>
+            <div id="shiftPersonalCalendarIssues" style="font-size:0.75rem; color:#9a4d33; margin-top:8px;" aria-live="polite"></div>
+            <button class="btn-generate" onclick="previewShiftPersonalCalendar()" style="margin-top:8px;">旧予定を確認（読み取りのみ）</button>
+            <button class="btn-generate" onclick="retryShiftPersonalCalendar()" style="margin-top:8px;">安全な同期エラーだけ再試行</button>
+        </div>
         <button class="btn-generate" onclick="resetCustomStamps()" style="background:#999; margin-bottom:10px;">🗑 マイスタンプをリセット</button>
         <button class="btn-generate" onclick="closeSettings()">閉じる</button>
     </div>
@@ -681,6 +696,7 @@
 
     function openSettings() {
         document.getElementById('settingsOverlay').style.display = 'block';
+        if (typeof window.loadShiftPersonalCalendarSettings === 'function') window.loadShiftPersonalCalendarSettings();
     }
     function closeSettings() { document.getElementById('settingsOverlay').style.display = 'none'; }
     function resetCustomStamps() {
@@ -692,5 +708,6 @@
 
 </script>
 <script src="./direct-sync.js?v=2026-09-24.1"></script>
+<script src="./personal-calendar-settings.js?v=2026-10-10.1"></script>
 </body>
 </html>
