@@ -197,18 +197,19 @@
     try {
       message('本人のカレンダーを再確認しています。旧予定は削除しません...');
       let result = await post('/api/shifts/line/calendar/retry', { action: 'activate_create_only' });
+      if (!result || result.ok !== true) throw new Error('登録の進行状況を確認できませんでした。');
       let batches = 1;
       while (result.ok && !result.complete && result.pending > 0
         && result.failures === 0 && batches < 40) {
         message('共通シフトを登録中です。残りの処理 ' + result.pending + '件...');
         const next = await post('/api/shifts/line/calendar/retry', { action: 'drain_create_only' });
-        if (!next.ok) throw new Error('登録の進行状況を確認できませんでした。');
+        if (!next || next.ok !== true) throw new Error('登録の進行状況を確認できませんでした。');
         result = next;
         batches++;
         if ((next.batch?.claimed || 0) === 0) break;
       }
-      if (result.complete) {
-        message('Googleカレンダーへの初回同期が完了しました。今後の変更も反映されます。');
+      if (result.complete === true && result.pending === 0 && result.failures === 0) {
+        message('Googleカレンダーへの初回登録が完了しました。');
       } else if (result.failures > 0) {
         message('登録できない予定があり、安全のため停止しました。状況を確認してください。');
       } else {
