@@ -27,6 +27,8 @@
 
   window.loadShiftPersonalCalendarSettings = async function () {
     if (busy) return;
+    const pilotButton = document.getElementById('shiftPersonalCalendarCreateOnlyPilot');
+    if (pilotButton) pilotButton.style.display = 'none';
     try {
       const config = await post('/api/shifts/line/config', {});
       const mode = config?.config?.calendarSyncMode;
@@ -50,16 +52,18 @@
       } else if(failures>0 || status.lastFailure) {
         message('同期エラーがあります。確認・再試行が必要です。');
       } else if(status.reconciliation!=='verified_clean') {
-        message('Google接続済み。旧予定の照合待ちです。');
+        message(status.canCreateOnlyPilot === true
+          ? 'Google接続済み。選んだシフトを登録できます。'
+          : 'Google接続済み。連携開始の確認待ちです。');
       } else {
         message('Google接続済み。未同期 '+pending+'件、失敗0件。');
       }
-      const pilotButton = document.getElementById('shiftPersonalCalendarCreateOnlyPilot');
       if (pilotButton) {
         pilotButton.style.display = status.canCreateOnlyPilot === true ? 'block' : 'none';
+        const modeLabel = status.syncMode === 'all' ? 'すべてのシフト' : '休み・作業日';
         pilotButton.textContent = status.reconciliation === 'verified_clean'
-          ? 'Googleカレンダーの同期を続ける（自分のみ）'
-          : '今のGoogleカレンダーに共通シフトを登録（自分のみ）';
+          ? '選んだシフトの同期を続ける'
+          : modeLabel + 'をGoogleカレンダーに反映';
       }
       const issues=document.getElementById('shiftPersonalCalendarIssues');
       if(issues) {
@@ -94,15 +98,20 @@
     const mode = document.getElementById('shiftPersonalCalendarMode')?.value;
     if (!['none', 'all', 'common'].includes(mode)) return;
     busy = true;
+    let saved = false;
     try {
       message('同期範囲を保存しています...');
       await post('/api/shifts/line/config', { syncMode: mode });
+      saved = true;
       message('同期範囲を保存しました。');
     } catch (error) {
       message(error instanceof Error ? error.message : '保存できませんでした。');
     } finally {
       busy = false;
     }
+    // The available registration action follows the saved Staff preference;
+    // do not force users to close/reopen Settings after selecting a mode.
+    if (saved) await window.loadShiftPersonalCalendarSettings();
   };
 
   window.connectShiftPersonalCalendar = async function () {
@@ -201,7 +210,7 @@
       let batches = 1;
       while (result.ok && !result.complete && result.pending > 0
         && result.failures === 0 && batches < 40) {
-        message('共通シフトを登録中です。残りの処理 ' + result.pending + '件...');
+        message('選んだシフトを登録中です。残りの処理 ' + result.pending + '件...');
         const next = await post('/api/shifts/line/calendar/retry', { action: 'drain_create_only' });
         if (!next || next.ok !== true) throw new Error('登録の進行状況を確認できませんでした。');
         result = next;

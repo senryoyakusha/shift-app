@@ -103,7 +103,7 @@
         body.palette-open { padding-bottom: calc(38vh + 70px); }
 
         #settingsOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 300; }
-        .settings-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; width: 90%; max-width: 400px; border-radius: 15px; padding: 25px 20px; box-sizing: border-box; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        .settings-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; width: 90%; max-width: 400px; max-height: calc(100dvh - 32px); overflow-y: auto; -webkit-overflow-scrolling: touch; border-radius: 15px; padding: 25px 20px; box-sizing: border-box; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
         .settings-header { font-weight: bold; font-size: 1.2rem; color: #333; margin-bottom: 10px; text-align: center; }
         .settings-desc { font-size: 0.8rem; color: #666; margin-bottom: 15px; line-height: 1.5; }
         .settings-radio { margin-bottom: 15px; font-size: 0.85rem; color: #444; }
@@ -220,7 +220,7 @@
             <div id="shiftPersonalCalendarIssues" style="font-size:0.75rem; color:#9a4d33; margin-top:8px;" aria-live="polite"></div>
             <button class="btn-generate" onclick="previewShiftPersonalCalendar()" style="margin-top:8px;">旧予定を確認（読み取りのみ）</button>
             <button class="btn-generate" onclick="previewShiftPersonalCalendarReset()" style="margin-top:8px;">2026年10月以降の整理対象を調査（削除なし）</button>
-            <button id="shiftPersonalCalendarCreateOnlyPilot" class="btn-generate" onclick="activateShiftPersonalCalendarCreateOnlyPilot()" style="margin-top:8px; display:none;">今のGoogleカレンダーに共通シフトを登録（自分のみ）</button>
+            <button id="shiftPersonalCalendarCreateOnlyPilot" class="btn-generate" onclick="activateShiftPersonalCalendarCreateOnlyPilot()" style="margin-top:8px; display:none;">選んだシフトをGoogleカレンダーに反映</button>
             <button class="btn-generate" onclick="retryShiftPersonalCalendar()" style="margin-top:8px;">安全な同期エラーだけ再試行</button>
         </div>
         <button class="btn-generate" onclick="resetCustomStamps()" style="background:#999; margin-bottom:10px;">🗑 マイスタンプをリセット</button>
@@ -710,6 +710,6 @@
 
 </script>
 <script src="./direct-sync.js?v=2026-09-24.1"></script>
-<script src="./personal-calendar-settings.js?v=2026-10-13.2"></script>
+<script src="./personal-calendar-settings.js?v=2026-10-15.2"></script>
 </body>
 </html>
