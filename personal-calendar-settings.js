@@ -27,6 +27,8 @@
 
   window.loadShiftPersonalCalendarSettings = async function () {
     if (busy) return;
+    const pilotButton = document.getElementById('shiftPersonalCalendarCreateOnlyPilot');
+    if (pilotButton) pilotButton.style.display = 'none';
     try {
       const config = await post('/api/shifts/line/config', {});
       const mode = config?.config?.calendarSyncMode;
@@ -56,7 +58,6 @@
       } else {
         message('Google接続済み。未同期 '+pending+'件、失敗0件。');
       }
-      const pilotButton = document.getElementById('shiftPersonalCalendarCreateOnlyPilot');
       if (pilotButton) {
         pilotButton.style.display = status.canCreateOnlyPilot === true ? 'block' : 'none';
         const modeLabel = status.syncMode === 'all' ? 'すべてのシフト' : '休み・作業日';
