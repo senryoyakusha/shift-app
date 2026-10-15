@@ -220,6 +220,7 @@
             <div id="shiftPersonalCalendarIssues" style="font-size:0.75rem; color:#9a4d33; margin-top:8px;" aria-live="polite"></div>
             <button class="btn-generate" onclick="previewShiftPersonalCalendar()" style="margin-top:8px;">旧予定を確認（読み取りのみ）</button>
             <button class="btn-generate" onclick="previewShiftPersonalCalendarReset()" style="margin-top:8px;">2026年10月以降の整理対象を調査（削除なし）</button>
+            <button id="shiftPersonalCalendarCreateOnlyPilot" class="btn-generate" onclick="activateShiftPersonalCalendarCreateOnlyPilot()" style="margin-top:8px; display:none;">今のGoogleカレンダーに共通シフトを登録（自分のみ）</button>
             <button class="btn-generate" onclick="retryShiftPersonalCalendar()" style="margin-top:8px;">安全な同期エラーだけ再試行</button>
         </div>
         <button class="btn-generate" onclick="resetCustomStamps()" style="background:#999; margin-bottom:10px;">🗑 マイスタンプをリセット</button>
@@ -709,6 +710,6 @@
 
 </script>
 <script src="./direct-sync.js?v=2026-09-24.1"></script>
-<script src="./personal-calendar-settings.js?v=2026-10-13.1"></script>
+<script src="./personal-calendar-settings.js?v=2026-10-13.2"></script>
 </body>
 </html>
