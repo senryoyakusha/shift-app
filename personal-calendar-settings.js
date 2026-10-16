@@ -50,6 +50,8 @@
     // Keep potentially unsafe controls hidden until fresh own-Staff status
     // is actually read. Failed requests never reuse stale registration rights.
     show('shiftPersonalCalendarConnectButton', false);
+    const connectAction = element('shiftPersonalCalendarConnectButton');
+    if (connectAction) connectAction.textContent = 'Googleカレンダーを接続';
     show('shiftPersonalCalendarCreateOnlyPilot', false);
     show('shiftPersonalCalendarRetry', false);
     show('shiftPersonalCalendarIssues', false);
@@ -198,7 +200,7 @@
     if (busy) return;
     busy = true;
     try {
-      message('本人のカレンダーを再確認しています。旧予定は削除しません...');
+      message('選んだシフトをGoogleカレンダーに登録しています…');
       let result = await post('/api/shifts/line/calendar/retry', { action: 'activate_create_only' });
       if (!result || result.ok !== true) throw new Error('登録の進行状況を確認できませんでした。');
       let batches = 1;
@@ -218,7 +220,7 @@
       } else if (result.failures > 0) {
         message('登録できない予定があり、安全のため停止しました。状況を確認してください。');
       } else {
-        message('同期の一部は処理待ちです。続けるボタンで安全に再開できます。');
+        message('未反映の予定は毎朝5時に自動処理します。');
       }
     } catch(error) {
       message(error instanceof Error ? error.message : '同期を開始できませんでした。');
