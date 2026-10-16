@@ -1,14 +1,28 @@
-/* Personal Google Calendar controls for canonical LINE Shift app.
- * No persistent credentials are stored in browser storage.
- * Feature remains unavailable until reviewed server rollout is enabled. */
+/* Three everyday Shift settings: custom stamps, own Google connection, sync.
+ * Existing LINE identity, OAuth, Staff scope and provider write flows stay unchanged.
+ * No credentials are saved in localStorage. */
 (function () {
   'use strict';
   const base = 'https://os.senryoyakusha.com';
   let busy = false;
 
+  function element(id) {
+    return document.getElementById(id);
+  }
+
   function message(text) {
-    const el = document.getElementById('shiftPersonalCalendarStatus');
-    if (el) el.textContent = text;
+    const target = element('shiftPersonalCalendarStatus');
+    if (target) target.textContent = text;
+  }
+
+  function connectionMessage(text) {
+    const target = element('shiftPersonalCalendarConnectionStatus');
+    if (target) target.textContent = text;
+  }
+
+  function show(id, visible) {
+    const target = element(id);
+    if (target) target.style.display = visible ? 'block' : 'none';
   }
 
   async function post(path, payload) {
@@ -21,96 +35,143 @@
       body: JSON.stringify({ accessToken, ...payload }),
       cache: 'no-store',
     });
-    if (!response.ok) throw new Error(response.status === 503 ? 'Googleカレンダー連携は準備中です。' : '接続情報を取得できませんでした。');
+    if (!response.ok) {
+      throw new Error(response.status === 503
+        ? '連携状態を確認できませんでした。時間をおいて再度開いてください。'
+        : response.status === 401
+          ? 'LINEのログイン状態を確認してください。'
+          : '接続情報を取得できませんでした。');
+    }
     return response.json();
   }
 
   window.loadShiftPersonalCalendarSettings = async function () {
     if (busy) return;
-    const pilotButton = document.getElementById('shiftPersonalCalendarCreateOnlyPilot');
-    if (pilotButton) pilotButton.style.display = 'none';
+    // Keep potentially unsafe controls hidden until fresh own-Staff status
+    // is actually read. Failed requests never reuse stale registration rights.
+    show('shiftPersonalCalendarConnectButton', false);
+    const connectAction = element('shiftPersonalCalendarConnectButton');
+    if (connectAction) connectAction.textContent = 'Googleカレンダーを接続';
+    show('shiftPersonalCalendarCreateOnlyPilot', false);
+    show('shiftPersonalCalendarRetry', false);
+    show('shiftPersonalCalendarIssues', false);
+    connectionMessage('接続状態を確認中…');
+    message('同期状態を確認中…');
     try {
       const config = await post('/api/shifts/line/config', {});
       const mode = config?.config?.calendarSyncMode;
       if (['none', 'all', 'common'].includes(mode)) {
-        document.getElementById('shiftPersonalCalendarMode').value = mode;
+        const select = element('shiftPersonalCalendarMode');
+        if (select) select.value = mode;
       }
       const status = await post('/api/shifts/line/calendar/status', {});
-      const counts=status.counts||{};
-      const pending=(counts.pending||0)+(counts.processing||0);
-      const failures=(counts.error||0)+(counts.held||0);
-      if(!status.connected) {
-        message('Googleカレンダーは未接続です。');
-      } else if(status.recoveryStaged) {
-        message(status.recoveryStageExpired
-          ? '復旧用認証の期限が切れました。同じGoogleアカウントで再接続してください。'
-          : 'Google再認証は仮保存済みです。旧予定の確認・復旧が終わるまで同期は停止中です。');
-      } else if(status.authorization==='reauthorization_required') {
-        message('Google認証の期限が切れました。再認証が必要です。');
-      } else if(status.reconciliation==='review_required' || (counts.uncertainEffects||0)>0) {
-        message('予定の照合が必要です。新しい予定は自動登録されません。');
-      } else if(failures>0 || status.lastFailure) {
-        message('同期エラーがあります。確認・再試行が必要です。');
-      } else if(status.reconciliation!=='verified_clean') {
-        message(status.canCreateOnlyPilot === true
-          ? 'Google接続済み。選んだシフトを登録できます。'
-          : 'Google接続済み。連携開始の確認待ちです。');
+      const selectedMode = status.syncMode || mode || 'none';
+      const counts = status.counts || {};
+      const pending = (counts.pending || 0) + (counts.processing || 0);
+      const failures = (counts.error || 0) + (counts.held || 0);
+      const uncertain = counts.uncertainEffects || 0;
+
+      if (!status.connected) {
+        connectionMessage('未接続');
+        show('shiftPersonalCalendarConnectButton', true);
+        message('Googleカレンダーを接続すると同期できます。');
       } else {
-        message('Google接続済み。未同期 '+pending+'件、失敗0件。');
-      }
-      if (pilotButton) {
-        pilotButton.style.display = status.canCreateOnlyPilot === true ? 'block' : 'none';
-        const modeLabel = status.syncMode === 'all' ? 'すべてのシフト' : '休み・作業日';
-        pilotButton.textContent = status.reconciliation === 'verified_clean'
-          ? '選んだシフトの同期を続ける'
-          : modeLabel + 'をGoogleカレンダーに反映';
-      }
-      const issues=document.getElementById('shiftPersonalCalendarIssues');
-      if(issues) {
-        const textParts=[
-          '未同期 '+pending+'件',
-          '失敗・停止 '+failures+'件',
-          '結果未確認 '+(counts.uncertainEffects||0)+'件',
-        ];
-        const reasonMap={
-          linked_event_missing:'Google上の予定が見つかりません',
-          authorization_lost:'Google認証を確認できません',
-          refresh_token_revoked:'Googleの再認証が必要です',
-          retry_exhausted:'同期の再試行が上限に達しました',
-          event_ownership_conflict:'予定の所有者を確認できません',
-          connection_changed_during_write:'認証変更中の予定を確認しています',
-          uncertain_external_effect:'Googleへの操作結果が未確認です。管理者による確認が必要です',
-          effect_settled_reaudit_required:'操作履歴を確認済みです。旧予定の全件照合が必要です',
-        };
-        for(const issue of (status.issues||[]).slice(0,5)) {
-          textParts.push(String(issue.shiftDate||'対象日要確認')+'：'+
-            (reasonMap[issue.reason]||'同期結果の確認が必要です'));
+        const needsReconnect = status.authorization === 'reauthorization_required'
+          || (status.recoveryStaged && status.recoveryStageExpired);
+        if (needsReconnect) {
+          connectionMessage('再接続が必要です。');
+          show('shiftPersonalCalendarConnectButton', true);
+        } else if (status.recoveryStaged) {
+          connectionMessage('接続の確認中です。');
+        } else if (status.authorization === 'ready') {
+          connectionMessage(status.accountEmail
+            ? '接続済み：' + status.accountEmail
+            : 'Googleカレンダー接続済み');
+        } else {
+          connectionMessage('Google接続を確認してください。');
         }
-        issues.textContent=textParts.join(' ／ ');
+        const connectButton = element('shiftPersonalCalendarConnectButton');
+        if (connectButton && needsReconnect) connectButton.textContent = 'Googleカレンダーを再接続';
+
+        if (status.recoveryStaged) {
+          message('接続の確認が終わるまで同期を停止しています。');
+        } else if (status.authorization !== 'ready') {
+          message('Googleの再接続が必要です。');
+        } else if (status.reconciliation === 'review_required' || uncertain > 0) {
+          message('同期する予定の確認が必要です。');
+        } else if (failures > 0 || status.lastFailure) {
+          message('同期できない予定があります。');
+        } else if (selectedMode === 'none') {
+          message('同期しない設定です。');
+        } else if (status.reconciliation !== 'verified_clean') {
+          message(status.canCreateOnlyPilot === true
+            ? '初回の同期を開始してください。'
+            : '同期開始の確認待ちです。');
+        } else {
+          message(pending > 0
+            ? '毎朝5時に自動同期します。未反映 ' + pending + '件'
+            : '毎朝5時に自動同期します。');
+        }
       }
+
+      const eligible = status.canCreateOnlyPilot === true
+        && status.reconciliation === 'pending'
+        && ['all', 'common'].includes(selectedMode);
+      show('shiftPersonalCalendarCreateOnlyPilot', eligible);
+      if (eligible) {
+        const button = element('shiftPersonalCalendarCreateOnlyPilot');
+        const label = selectedMode === 'all' ? 'すべてのシフト' : '休み・作業日';
+        if (button) button.textContent = label + 'をGoogleカレンダーに反映';
+      }
+      // Retry is useful only for safe transient errors. Held/uncertain Google
+      // writes must stay stopped for owner/admin review.
+      show('shiftPersonalCalendarRetry', status.connected === true
+        && status.authorization === 'ready'
+        && !status.recoveryStaged && uncertain === 0
+        && (counts.error || 0) > 0);
+
+      const reasonMap = {
+        linked_event_missing: 'Google上の予定が見つかりません',
+        authorization_lost: 'Googleの再接続が必要です',
+        refresh_token_revoked: 'Googleの再接続が必要です',
+        retry_exhausted: '同期の再試行が上限に達しました',
+        event_ownership_conflict: '予定の確認が必要です',
+        connection_changed_during_write: '接続の確認中です',
+        uncertain_external_effect: '同期結果の確認が必要です',
+        effect_settled_reaudit_required: '予定の確認が必要です',
+      };
+      const problems = [];
+      if (failures > 0) problems.push('失敗・停止 ' + failures + '件');
+      if (uncertain > 0) problems.push('結果を確認できない予定 ' + uncertain + '件');
+      for (const issue of (status.issues || []).slice(0, 3)) {
+        problems.push(String(issue.shiftDate || '対象日不明') + '：'
+          + (reasonMap[issue.reason] || '同期結果の確認が必要です'));
+      }
+      const issues = element('shiftPersonalCalendarIssues');
+      if (issues) issues.textContent = problems.join(' ／ ');
+      show('shiftPersonalCalendarIssues', problems.length > 0);
     } catch (error) {
-      message(error instanceof Error ? error.message : '連携状態を確認できませんでした。');
+      connectionMessage('接続状態を確認できませんでした。');
+      message(error instanceof Error ? error.message : '同期状態を確認できませんでした。');
     }
   };
 
   window.saveShiftPersonalCalendarMode = async function () {
     if (busy) return;
-    const mode = document.getElementById('shiftPersonalCalendarMode')?.value;
+    const mode = element('shiftPersonalCalendarMode')?.value;
     if (!['none', 'all', 'common'].includes(mode)) return;
     busy = true;
     let saved = false;
     try {
-      message('同期範囲を保存しています...');
+      message('同期するシフトを保存しています…');
       await post('/api/shifts/line/config', { syncMode: mode });
       saved = true;
-      message('同期範囲を保存しました。');
+      message('保存しました。');
     } catch (error) {
       message(error instanceof Error ? error.message : '保存できませんでした。');
     } finally {
       busy = false;
     }
-    // The available registration action follows the saved Staff preference;
-    // do not force users to close/reopen Settings after selecting a mode.
     if (saved) await window.loadShiftPersonalCalendarSettings();
   };
 
@@ -118,11 +179,11 @@
     if (busy) return;
     busy = true;
     try {
-      message('Google認証画面を開いています...');
+      connectionMessage('Googleの接続画面を開いています…');
       const data = await post('/api/shifts/line/calendar/connect', {});
       const url = new URL(data.authorizeUrl);
       if (url.origin !== base || url.pathname !== '/api/shifts/line/calendar/authorize') {
-        throw new Error('認証URLを確認できませんでした。');
+        throw new Error('Googleの接続先を確認できませんでした。');
       }
       if (typeof liff.openWindow === 'function') {
         liff.openWindow({ url: url.toString(), external: true });
@@ -130,81 +191,16 @@
         window.location.assign(url.toString());
       }
     } catch (error) {
-      message(error instanceof Error ? error.message : 'Googleの接続を開始できませんでした。');
+      connectionMessage(error instanceof Error ? error.message : 'Googleに接続できませんでした。');
     } finally {
       busy = false;
     }
   };
-  window.previewShiftPersonalCalendar = async function () {
-    if (busy) return;
-    busy=true;
-    try {
-      message('旧予定を読み取り専用で照合しています...');
-      const result=await post('/api/shifts/line/calendar/reconcile-preview',{});
-      const issues=document.getElementById('shiftPersonalCalendarIssues');
-      const audit=result.audit;
-      if (issues && audit) {
-        const lines=[
-          '照合対象 '+audit.totalShifts+'件',
-          '旧予定の引き継ぎ候補 '+audit.adoptable+'件',
-          '要確認 '+audit.reviewRequired+'件',
-        ];
-        for (const issue of (audit.issues||[]).slice(0,5)) {
-          lines.push(String(issue.date)+'：予定の確認が必要です');
-        }
-        issues.textContent=lines.join(' ／ ');
-      }
-      message(audit.reviewRequired>0
-        ? '旧予定に要確認があります。自動削除・自動再作成は行いません。'
-        : '旧予定の読み取り照合が終わりました。同期開始には管理側での確認が必要です。');
-    } catch(error) {
-      message(error instanceof Error ? error.message : '旧予定の照合ができませんでした。');
-    } finally { busy=false; }
-  };
-
-  window.previewShiftPersonalCalendarReset = async function () {
-    if (busy) return;
-    busy = true;
-    try {
-      message('2026年10月以降の旧予定を読み取り専用で調査しています...');
-      const result = await post('/api/shifts/line/calendar/reconcile-preview', { scope: 'reset_2026_10' });
-      const inventory = result.inventory;
-      if (!inventory || inventory.readOnly !== true || inventory.safeToDelete !== false) {
-        throw new Error('調査結果を確認できませんでした。');
-      }
-      const issues = document.getElementById('shiftPersonalCalendarIssues');
-      if (issues) {
-        const sourceCounts = inventory.bySource || {};
-        const sourceText = Object.entries(sourceCounts)
-          .map(([source, count]) => source + ' ' + Number(count) + '件').join('、');
-        const lines = [
-          '対象期間 2026年10月1日以降',
-          'Supabaseシフト ' + inventory.canonicalShifts + '件（' + sourceText + '）',
-          '旧シフト予定の削除候補 ' + inventory.oldCandidates + '件',
-          '新OS管理予定 ' + inventory.osManaged + '件',
-          '要確認 ' + inventory.reviewRequired + '件',
-          '削除対象外の予定 ' + inventory.protectedEvents + '件',
-          '旧ID未発見 ' + inventory.missingLegacyIds + '件',
-          '※旧スプレッドシートにしかない予定IDは未照合。削除候補は全件確定していません',
-        ];
-        for (const issue of (inventory.issues || []).slice(0, 5)) {
-          lines.push(String(issue.date || '対象日不明') + '：確認が必要です');
-        }
-        issues.textContent = lines.join(' ／ ');
-      }
-      message('読み取り調査が完了しました。削除・登録・自動同期は一切実行していません。');
-    } catch (error) {
-      message(error instanceof Error ? error.message : '10月以降の調査ができませんでした。');
-    } finally {
-      busy = false;
-    }
-  };
-
   window.activateShiftPersonalCalendarCreateOnlyPilot = async function () {
     if (busy) return;
     busy = true;
     try {
-      message('本人のカレンダーを再確認しています。旧予定は削除しません...');
+      message('選んだシフトをGoogleカレンダーに登録しています…');
       let result = await post('/api/shifts/line/calendar/retry', { action: 'activate_create_only' });
       if (!result || result.ok !== true) throw new Error('登録の進行状況を確認できませんでした。');
       let batches = 1;
@@ -219,10 +215,12 @@
       }
       if (result.complete === true && result.pending === 0 && result.failures === 0) {
         message('Googleカレンダーへの初回登録が完了しました。');
+        const activateButton = document.getElementById('shiftPersonalCalendarCreateOnlyPilot');
+        if (activateButton) activateButton.style.display = 'none';
       } else if (result.failures > 0) {
         message('登録できない予定があり、安全のため停止しました。状況を確認してください。');
       } else {
-        message('同期の一部は処理待ちです。続けるボタンで安全に再開できます。');
+        message('未反映の予定は毎朝5時に自動処理します。');
       }
     } catch(error) {
       message(error instanceof Error ? error.message : '同期を開始できませんでした。');
