@@ -448,14 +448,34 @@
         }
     }
 
+    // Monthly roster follows the canonical effective-dated Staff/Store history.
+    // Joining on November 10 includes the person in November, never in October.
+    // Do not require an existing Shift row just to show the Staff member.
+    function sharedUsersForMonth(users, storeName, year, month) {
+        const from = year + '-' + String(month).padStart(2, '0') + '-01';
+        const to = year + '-' + String(month).padStart(2, '0') + '-' +
+            String(new Date(year, month, 0).getDate()).padStart(2, '0');
+        return (Array.isArray(users) ? users : []).filter(user => {
+            const memberships = Array.isArray(user.storeMemberships)
+                ? user.storeMemberships.filter(m => m && typeof m.storeName === 'string' && m.storeName.trim())
+                : [];
+            if (memberships.length) {
+                return memberships.some(m => String(m.storeName).trim() === storeName &&
+                    (!m.startDate || m.startDate <= to) && (!m.endDate || m.endDate >= from));
+            }
+            // Preserve the existing list for older active Staff without dated rows.
+            return Array.isArray(user.stores) && user.stores.includes(storeName);
+        });
+    }
+
     function renderSharedCalendars() {
         const container = document.getElementById('sharedCalendarApp');
-        container.innerHTML = ""; 
-        let targetUsers = globalUsersData.filter(u => u.stores && u.stores.includes(currentStore));
-        if (targetUsers.length === 0) return;
+        container.innerHTML = "";
         const now = new Date();
         for (let i = 0; i < 5; i++) {
             const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+            const targetUsers = sharedUsersForMonth(globalUsersData, currentStore, d.getFullYear(), d.getMonth() + 1);
+            if (!targetUsers.length) continue;
             createSharedTable(d.getFullYear(), d.getMonth() + 1, targetUsers, container);
         }
     }
